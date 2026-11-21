@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Відеоплеєр</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --accent: #e3262f;
+    --bg: #1b1a1f;
+    --fg: #ececec;
+    --muted: rgba(236,236,236,.62);
+    --ring: rgba(255,255,255,.82);
+    --hover-fill: #d9d9d9;
+    --track: rgba(255,255,255,.18);
+    --buffer: rgba(255,255,255,.36);
+    --panel: rgba(30,29,35,.97);
+    --font: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.3 var(--font); }
+  button { font: inherit; color: inherit; }
+
+  .vp { position: relative; width: 100%; height: 100%; overflow: hidden; background: #000; border-radius: 14px;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; outline: none; }
+  body.embed .vp { border-radius: 0; }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #000; object-fit: contain; pointer-events: none; }
+  .vp.fit-cover video { object-fit: cover; }
+  .gesture { position: absolute; inset: 0; }
+
+  /* ---------- Верхня панель із назвою ---------- */
+  .top { position: absolute; left: 0; right: 0; top: 0; padding: 16px 20px 40px; pointer-events: none;
+    background: linear-gradient(to bottom, rgba(18,17,22,.8), rgba(18,17,22,0)); transition: opacity .25s ease; }
+  .title { font-weight: 500; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%; }
+  .top:empty, .top.no-title { display: none; }
+
+  /* ---------- Круглі кнопки: контур -> заливка при наведенні ---------- */
+  .rbtn { background: none; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center; border-radius: 50%; }
+  .rbtn svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .rbtn .ring { fill: none; stroke: var(--ring); stroke-width: 2; transition: opacity .15s ease; }
+  .rbtn .fill { fill: var(--hover-fill); opacity: 0; transition: opacity .15s ease; }
+  .rbtn .ico { fill: #fff; transition: fill .15s ease; }
+  .rbtn .line { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: opacity .15s ease; }
+  .rbtn .num { fill: #fff; font: 600 8.5px var(--font); transition: opacity .15s ease; }
+  @media (hover: hover) {
+    .rbtn:hover .fill { opacity: 1; }
+    .rbtn:hover .ring, .rbtn:hover .line, .rbtn:hover .num { opacity: 0; }
+    .rbtn:hover .ico { fill: var(--accent); }
+  }
+  .rbtn:active .fill, .rbtn:focus-visible .fill { opacity: 1; }
+  .rbtn:active .ring, .rbtn:active .line, .rbtn:active .num,
+  .rbtn:focus-visible .ring, .rbtn:focus-visible .line, .rbtn:focus-visible .num { opacity: 0; }
+  .rbtn:active .ico, .rbtn:focus-visible .ico { fill: var(--accent); }
+  .rbtn:focus-visible { outline: none; }
+
+  .i-pause { display: none; }
+  .playing .i-play { display: none; }
+  .playing .i-pause { display: inline; }
+
+  /* ---------- Велика кнопка по центру ---------- */
+  .center { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; transform: translate(-50%, -50%);
+    transition: opacity .2s ease, transform .2s ease; filter: drop-shadow(0 4px 18px rgba(0,0,0,.35)); }
+  .vp.playing .center, .vp.waiting .center, .vp.failed .center { opacity: 0; pointer-events: none; transform: translate(-50%, -50%) scale(.9); }
+
+  .spinner { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.2); border-top-color: var(--accent); animation: spin .8s linear infinite; display: none; pointer-events: none; }
+  .vp.waiting .spinner { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Нижня панель ---------- */
+  .controls { position: absolute; left: 0; right: 0; bottom: 0; padding: 36px 22px 14px;
+    background: linear-gradient(to top, rgba(22,21,26,.94) 0%, rgba(22,21,26,.75) 55%, rgba(22,21,26,0) 100%);
+    transition: opacity .25s ease; }
+  .vp:not(.started) .controls { opacity: 0; pointer-events: none; }
+  .vp.started.idle .controls, .vp.started.idle .top { opacity: 0; pointer-events: none; }
+  .vp.started.idle { cursor: none; }
+
+  .timeline { display: flex; align-items: center; gap: 16px; }
+  .time { font-size: 15px; font-variant-numeric: tabular-nums; color: var(--fg); min-width: 48px; letter-spacing: .02em; }
+  .time.end { text-align: right; }
+  .progress { position: relative; flex: 1; height: 20px; display: flex; align-items: center; cursor: pointer; touch-action: none; }
+  .progress .track { position: absolute; left: 0; right: 0; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; transition: height .12s ease; }
+  .progress .buffered, .progress .played { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; }
+  .progress .buffered { background: var(--buffer); }
+  .progress .played { background: var(--accent); }
+  .progress .thumb { position: absolute; left: 0; width: 14px; height: 14px; border-radius: 50%; background: #fff;
+    transform: translateX(-50%) scale(0); transition: transform .12s ease; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .progress:hover .track, .progress.drag .track { height: 6px; }
+  .progress:hover .thumb, .progress.drag .thumb, .progress:focus-visible .thumb { transform: translateX(-50%) scale(1); }
+  .progress:focus-visible { outline: none; }
+  .progress .tip { position: absolute; bottom: 24px; transform: translateX(-50%); background: var(--panel); padding: 4px 8px; border-radius: 6px;
+    font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; display: none; }
+  .progress:hover .tip, .progress.drag .tip { display: block; }
+
+  .bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 8px; }
+  .bar .left { display: flex; align-items: center; gap: 8px; justify-self: start; }
+  .bar .mid { display: flex; align-items: center; gap: 22px; }
+  .bar .right { display: flex; align-items: center; gap: 6px; justify-self: end; }
+
+  .skip { width: 44px; height: 44px; }
+  .play { width: 52px; height: 52px; }
+
+  /* Прості іконки (гучність, швидкість, якість, екран) */
+  .ibtn { background: none; border: 0; width: 38px; height: 38px; padding: 7px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: #fff;
+    transition: background .15s ease, color .15s ease; }
+  .ibtn svg { width: 100%; height: 100%; display: block; }
+  .ibtn.txt { width: auto; min-width: 38px; padding: 0 10px; border-radius: 19px; font-weight: 500; font-size: 13px; }
+  @media (hover: hover) { .ibtn:hover { background: var(--hover-fill); color: var(--accent); } }
+  .ibtn:active, .ibtn:focus-visible, .ibtn[aria-expanded="true"] { background: var(--hover-fill); color: var(--accent); outline: none; }
+  .i-muted { display: none; }
+  .is-muted .i-muted { display: inline; }
+  .is-muted .i-vol { display: none; }
+
+  .vol { -webkit-appearance: none; appearance: none; width: 110px; height: 4px; border-radius: 2px; cursor: pointer; margin: 0;
+    background: linear-gradient(to right, #fff 0 var(--v, 100%), var(--track) var(--v, 100%) 100%); }
+  .vol::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 0; transform: scale(0); transition: transform .12s; }
+  .vol::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 0; }
+  .vol:hover::-webkit-slider-thumb, .vol:focus-visible::-webkit-slider-thumb { transform: scale(1); }
+  .vol:focus-visible { outline: none; }
+
+  /* Меню */
+  .menu-wrap { position: relative; }
+  .menu { position: absolute; right: 0; bottom: 48px; min-width: 170px; background: var(--panel); border-radius: 12px; padding: 6px;
+    display: none; box-shadow: 0 12px 32px rgba(0,0,0,.5); max-height: 60vh; overflow: auto; }
+  .menu.open { display: block; }
+  .menu h4 { margin: 6px 10px 6px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .menu button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 16px; background: none; border: 0;
+    padding: 9px 10px; border-radius: 8px; cursor: pointer; text-align: left; font-size: 14px; }
+  .menu button:hover, .menu button:focus-visible { background: rgba(255,255,255,.08); outline: none; }
+  .menu button[aria-checked="true"] { color: var(--accent); font-weight: 500; }
+  .menu button[aria-checked="true"]::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .menu .now { color: var(--muted); font-size: 12px; padding: 4px 10px 6px; }
+
+  /* Підказки */
+  .toast { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); padding: 8px 14px; border-radius: 10px;
+    font-size: 13px; opacity: 0; transition: opacity .2s ease; pointer-events: none; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+  .hint { position: absolute; top: 50%; width: 64px; height: 64px; margin-top: -32px; border-radius: 50%; background: rgba(217,217,217,.92);
+    display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+  .hint.l { left: 14%; } .hint.r { right: 14%; }
+  .hint.show { opacity: 1; }
+  .hint svg { width: 30px; height: 30px; fill: var(--accent); }
+
+  .error { position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; background: var(--bg); }
+  .vp.failed .error { display: grid; }
+  .vp.failed .controls, .vp.failed .top, .vp.failed .gesture { display: none; }
+  .error b { display: block; font-weight: 500; font-size: 16px; margin-bottom: 6px; }
+  .error span { color: var(--muted); font-size: 13px; }
+  .error code { font-size: 12px; background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 4px; }
+
+  @media (max-width: 640px) {
+    .controls { padding: 28px 12px 8px; }
+    .timeline { gap: 10px; }
+    .time { font-size: 12px; min-width: 38px; }
+    .vol { display: none; }
+    .bar .mid { gap: 12px; }
+    .skip { width: 38px; height: 38px; }
+    .play { width: 44px; height: 44px; }
+    .ibtn { width: 34px; height: 34px; padding: 6px; }
+    .ibtn.txt { min-width: 34px; padding: 0 8px; font-size: 12px; }
+    .center { width: 64px; height: 64px; }
+    .top { padding: 10px 12px 30px; } .title { font-size: 14px; }
+  }
+  @media (max-width: 380px) { .bar .right .speed-wrap { display: none; } }
+</style>
+</head>
+<body>
+<div class="vp" id="vp" tabindex="0">
+  <video id="video" playsinline preload="metadata" disableremoteplayback
+         controlslist="nodownload noremoteplayback noplaybackrate" x-webkit-airplay="deny"></video>
+  <div class="gesture" id="gesture"></div>
+
+  <div class="top no-title" id="top"><div class="title" id="title"></div></div>
+
+  <button class="rbtn center" id="centerBtn" aria-label="">
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <circle class="ring" cx="24" cy="24" r="23"/><circle class="fill" cx="24" cy="24" r="24"/>
+      <path class="ico i-play" d="M19 15.6v16.8c0 .8.9 1.3 1.6.9l13.3-8.4c.6-.4.6-1.4 0-1.8L20.6 14.7c-.7-.4-1.6.1-1.6.9z"/>
+      <g class="ico i-pause"><rect x="17" y="15" width="4.6" height="18" rx="1.4"/><rect x="26.4" y="15" width="4.6" height="18" rx="1.4"/></g>
+    </svg>
+  </button>
+  <div class="spinner" aria-hidden="true"></div>
+  <div class="hint l" id="hintL"><svg viewBox="0 0 24 24"><path d="M11.5 6.5v11L4 12zM20 6.5v11L12.5 12z"/></svg></div>
+  <div class="hint r" id="hintR"><svg viewBox="0 0 24 24"><path d="M12.5 6.5v11L20 12zM4 6.5v11l7.5-5.5z"/></svg></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="error" id="error"><div id="errorText"></div></div>
+
+  <div class="controls" id="controls">
+    <div class="timeline">
+      <span class="time" id="cur">00:00</span>
+      <div class="progress" id="progress" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="track"><div class="buffered" id="buffered"></div><div class="played" id="played"></div></div>
+        <div class="thumb" id="thumb"></div>
+        <div class="tip" id="tip">00:00</div>
+      </div>
+      <span class="time end" id="dur">00:00</span>
+    </div>
+
+    <div class="bar">
+      <div class="left">
+        <button class="ibtn" id="muteBtn">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M3.5 9.2v5.6c0 .4.3.7.7.7h3.1l4.4 3.9c.5.4 1.3.1 1.3-.6V5.2c0-.7-.8-1-1.3-.6L7.3 8.5H4.2c-.4 0-.7.3-.7.7z"/>
+            <g class="i-vol" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/></g>
+            <g class="i-muted" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M16 9.5l5 5M21 9.5l-5 5"/></g>
+          </svg>
+        </button>
+        <input class="vol" id="vol" type="range" min="0" max="1" step="0.05" value="1">
+      </div>
+
+      <div class="mid">
+        <button class="rbtn skip" id="backBtn">
+          <svg viewBox="0 0 40 40" aria-hidden="true">
+            <circle class="fill" cx="20" cy="21" r="15"/>
+            <path class="line" d="M20 9 A12 12 0 1 1 8.6 17.3"/><path class="line" d="M23 6 L20 9 L23 12"/>
+            <text class="num" x="7.5" y="10" text-anchor="middle">10</text>
+            <path class="ico" d="M19.6 16.8v8.4L13.4 21zM26.4 16.8v8.4L20.2 21z"/>
+          </svg>
+        </button>
+        <button class="rbtn play" id="playBtn">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <circle class="ring" cx="24" cy="24" r="23"/><circle class="fill" cx="24" cy="24" r="24"/>
+            <path class="ico i-play" d="M19 15.6v16.8c0 .8.9 1.3 1.6.9l13.3-8.4c.6-.4.6-1.4 0-1.8L20.6 14.7c-.7-.4-1.6.1-1.6.9z"/>
+            <g class="ico i-pause"><rect x="17" y="15" width="4.6" height="18" rx="1.4"/><rect x="26.4" y="15" width="4.6" height="18" rx="1.4"/></g>
+          </svg>
+        </button>
+        <button class="rbtn skip" id="fwdBtn">
+          <svg viewBox="0 0 40 40" aria-hidden="true">
+            <circle class="fill" cx="20" cy="21" r="15"/>
+            <g transform="translate(40 0) scale(-1 1)"><path class="line" d="M20 9 A12 12 0 1 1 8.6 17.3"/><path class="line" d="M23 6 L20 9 L23 12"/></g>
+            <text class="num" x="32.5" y="10" text-anchor="middle">10</text>
+            <path class="ico" d="M20.4 16.8v8.4l6.2-4.2zM13.6 16.8v8.4l6.2-4.2z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="right">
+        <div class="menu-wrap speed-wrap">
+          <button class="ibtn txt" id="speedBtn" aria-haspopup="true" aria-expanded="false">1×</button>
+          <div class="menu" id="speedMenu" role="menu"></div>
+        </div>
+        <div class="menu-wrap" id="qualityWrap" hidden>
+          <button class="ibtn" id="qualityBtn" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>
+            </svg>
+          </button>
+          <div class="menu" id="qualityMenu" role="menu"></div>
+        </div>
+        <button class="ibtn" id="fsBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 9V5.5C4 4.7 4.7 4 5.5 4H9M15 4h3.5c.8 0 1.5.7 1.5 1.5V9M20 15v3.5c0 .8-.7 1.5-1.5 1.5H15M9 20H5.5C4.7 20 4 19.3 4 18.5V15"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // =====================================================================
+  //  НАЛАШТУВАННЯ ВЛАСНИКА (змінюються тут, а не в посиланні)
+  // =====================================================================
+  var CONFIG = {
+    defaultBase: "https://cdn.astakhova.com.ua",   // для короткого ?v=папка/відео
+    allowedHosts: [],                               // [] — будь-які сайти; або ["cdn.astakhova.com.ua", "*.b-cdn.net"]
+    hlsLib:  "https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js",
+    dashLib: "https://cdn.jsdelivr.net/npm/dashjs@4.7.4/dist/dash.all.min.js",
+    lang: "uk"
+  };
+
+  var I18N = {
+    uk: { play: "Відтворити", pause: "Пауза", back: "Назад на 10 секунд", fwd: "Вперед на 10 секунд", mute: "Вимкнути звук",
+          unmute: "Увімкнути звук", volume: "Гучність", seek: "Перемотування", speed: "Швидкість", normal: "Звичайна",
+          quality: "Якість", auto: "Авто", now: "Зараз", fs: "На весь екран", exitFs: "Вийти з повного екрана",
+          resume: "Продовжуємо з", noSrc: "Відео не вказано", noSrcHint: "Додайте до адреси <code>?src=посилання-на-відео</code>",
+          badSrc: "Це посилання не підтримується", badSrcHint: "Потрібне посилання https:// на відео з дозволеного сайту",
+          loadErr: "Не вдалося завантажити відео", loadErrHint: "Перевірте з'єднання та оновіть сторінку", sec: "с" },
+    ru: { play: "Воспроизвести", pause: "Пауза", back: "Назад на 10 секунд", fwd: "Вперёд на 10 секунд", mute: "Выключить звук",
+          unmute: "Включить звук", volume: "Громкость", seek: "Перемотка", speed: "Скорость", normal: "Обычная",
+          quality: "Качество", auto: "Авто", now: "Сейчас", fs: "На весь экран", exitFs: "Выйти из полноэкранного режима",
+          resume: "Продолжаем с", noSrc: "Видео не указано", noSrcHint: "Добавьте к адресу <code>?src=ссылка-на-видео</code>",
+          badSrc: "Эта ссылка не поддерживается", badSrcHint: "Нужна ссылка https:// на видео с разрешённого сайта",
+          loadErr: "Не удалось загрузить видео", loadErrHint: "Проверьте соединение и обновите страницу", sec: "с" },
+    en: { play: "Play", pause: "Pause", back: "Back 10 seconds", fwd: "Forward 10 seconds", mute: "Mute",
+          unmute: "Unmute", volume: "Volume", seek: "Seek", speed: "Speed", normal: "Normal",
+          quality: "Quality", auto: "Auto", now: "Now", fs: "Fullscreen", exitFs: "Exit fullscreen",
+          resume: "Resuming from", noSrc: "No video specified", noSrcHint: "Add <code>?src=video-url</code> to the address",
+          badSrc: "This link is not supported", badSrcHint: "Use an https:// link to a video on an allowed site",
+          loadErr: "Could not load the video", loadErrHint: "Check your connection and reload the page", sec: "s" }
+  };
+
+  // =====================================================================
+  //  PROPS: усе береться з адреси сторінки
+  // =====================================================================
+  var Q = new URLSearchParams(location.search);
+  function prop(n) { var v = Q.get(n); return v === null ? null : v.trim(); }
+  function flag(n, def) { var v = prop(n); return v === null ? def : !/^(0|false|no|off)$/i.test(v); }
+
+  var langKey = (prop("lang") || CONFIG.lang).toLowerCase();
+  var T = I18N[langKey] || I18N[CONFIG.lang];
+  document.documentElement.lang = I18N[langKey] ? langKey : CONFIG.lang;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var vp = $("vp"), video = $("video");
+
+  function hostAllowed(h) {
+    if (!CONFIG.allowedHosts.length) return true;
+    return CONFIG.allowedHosts.some(function (a) {
+      a = a.toLowerCase();
+      return a.indexOf("*.") === 0 ? (h === a.slice(2) || h.slice(-(a.length - 1)) === a.slice(1)) : h === a;
+    });
+  }
+  function safeUrl(raw, checkHost) {
+    if (!raw) return null;
+    var u;
+    try { u = new URL(raw, location.href); } catch (e) { return null; }
+    var httpOk = location.protocol !== "https:";                  // http — лише коли сама сторінка не https
+    if (!(u.protocol === "https:" || (u.protocol === "http:" && httpOk))) return null;
+    if (checkHost && !hostAllowed(u.hostname.toLowerCase())) return null;
+    return u;
+  }
+  function fromShortPath(p) {                                   // ?v=amm/urok -> CDN/amm/urok/master.m3u8
+    p = p.replace(/^\/+|\/+$/g, "");
+    if (!/^[\w.\-\/]+$/.test(p) || p.indexOf("..") !== -1) return null;
+    if (!/\.[a-z0-9]{2,5}$/i.test(p)) p += "/master.m3u8";
+    return safeUrl(CONFIG.defaultBase.replace(/\/+$/, "") + "/" + p, true);
+  }
+  function parseTime(s) {
+    if (!s) return NaN;
+    if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+    var m = s.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+    if (m && m[0]) return (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0);
+    var p = s.split(":").map(Number);
+    return p.every(isFinite) ? p.reduce(function (a, n) { return a * 60 + n; }, 0) : NaN;
+  }
+  function detectType(u) {
+    var t = (prop("type") || "").toLowerCase();
+    if (/^(hls|m3u8)$/.test(t)) return "hls";
+    if (/^(dash|mpd)$/.test(t)) return "dash";
+    if (/^(file|mp4|webm|mov|ogg|video)$/.test(t)) return "file";
+    var path = u.pathname.toLowerCase();
+    if (/\.m3u8$/.test(path)) return "hls";
+    if (/\.mpd$/.test(path)) return "dash";
+    return "file";
+  }
+
+  var rawSrc = prop("src"), rawV = prop("v");
+  var srcUrl = rawSrc ? safeUrl(rawSrc, true) : (rawV ? fromShortPath(rawV) : null);
+
+  var props = {
+    src: srcUrl ? srcUrl.href : null,
+    type: srcUrl ? detectType(srcUrl) : null,
+    poster: prop("poster"),
+    title: prop("title"),
+    start: parseTime(prop("t") || prop("start")),
+    autoplay: flag("autoplay", false),
+    muted: flag("muted", false),
+    loop: flag("loop", false),
+    resume: flag("resume", true),
+    speed: parseFloat(prop("speed")),
+    accent: prop("accent") || prop("color"),
+    embed: flag("embed", false),
+    fit: prop("fit")
+  };
+
+  // ---------- Оформлення ----------
+  if (props.embed) document.body.classList.add("embed");
+  if (props.fit === "cover") vp.classList.add("fit-cover");
+  if (props.accent && /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(props.accent)) {
+    document.documentElement.style.setProperty("--accent", props.accent.charAt(0) === "#" ? props.accent : "#" + props.accent);
+  }
+  if (props.title) {
+    $("title").textContent = props.title;                     // лише текст — жодного HTML із посилання
+    $("top").classList.remove("no-title");
+    document.title = props.title;
+  }
+
+  function label(id, text) { var el = $(id); el.setAttribute("aria-label", text); el.title = text; }
+  label("centerBtn", T.play); label("playBtn", T.play); label("backBtn", T.back); label("fwdBtn", T.fwd);
+  label("muteBtn", T.mute); label("speedBtn", T.speed); label("qualityBtn", T.quality); label("fsBtn", T.fs);
+  $("vol").setAttribute("aria-label", T.volume); $("progress").setAttribute("aria-label", T.seek);
+
+  function showError(title, hint) {
+    $("errorText").innerHTML = "<b></b><span></span>";
+    $("errorText").querySelector("b").textContent = title;
+    $("errorText").querySelector("span").innerHTML = hint;      // hint — лише з I18N, не з адреси
+    vp.classList.add("failed", "started");
+    vp.classList.remove("waiting");
+  }
+
+  if (!props.src) {
+    if (rawSrc || rawV) showError(T.badSrc, T.badSrcHint); else showError(T.noSrc, T.noSrcHint);
+    return;
+  }
+
+  // ---------- Заборона завантаження ----------
+  vp.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  vp.addEventListener("dragstart", function (e) { e.preventDefault(); });
+  video.setAttribute("draggable", "false");
+
+  // ---------- Допоміжне ----------
+  function pad(n) { return String(n).padStart(2, "0"); }
+  var longVideo = false;
+  function fmt(t) {
+    if (!isFinite(t) || t < 0) t = 0;
+    var h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = Math.floor(t % 60);
+    return (h || longVideo ? pad(h) + ":" : "") + pad(m) + ":" + pad(s);
+  }
+  function store(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  var toastTimer;
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove("show"); }, 1400);
+  }
+  function loadScript(url) {
+    return new Promise(function (ok, fail) {
+      var s = document.createElement("script"); s.src = url; s.async = true;
+      s.onload = ok; s.onerror = function () { fail(new Error("script " + url)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // ---------- Постер ----------
+  var posterUrl = safeUrl(props.poster, false);
+  if (posterUrl) video.poster = posterUrl.href;
+  else if (!props.poster && props.type === "hls" && /\/master\.m3u8$/i.test(srcUrl.pathname)) {
+    var guess = new URL("poster.jpg", srcUrl.href).href, img = new Image();
+    img.onload = function () { if (!video.poster) video.poster = guess; };
+    img.src = guess;                                          // підставляємо, лише якщо такий файл є
+  }
+
+  // ---------- Підключення джерела ----------
+  var engine = null;          // { levels(), set(i), current }
+  var storeKey = "uvp-pos:" + props.src.split("?")[0];
+  var mseOk = !!(window.MediaSource || window.ManagedMediaSource);
+  var nativeHls = !!video.canPlayType("application/vnd.apple.mpegurl");
+
+  video.muted = props.muted || props.autoplay;
+  video.loop = props.loop;
+  if (props.speed >= 0.25 && props.speed <= 4) { video.defaultPlaybackRate = video.playbackRate = props.speed; }
+
+  function startHls() {
+    if (!mseOk && nativeHls) { video.src = props.src; return Promise.resolve(); }
+    return loadScript(CONFIG.hlsLib).then(function () {
+      if (!window.Hls || !Hls.isSupported()) { if (nativeHls) { video.src = props.src; return; } throw new Error("hls unsupported"); }
+      var hls = new Hls({ capLevelToPlayerSize: true, maxBufferLength: 30 });
+      var fatal = 0;
+      hls.on(Hls.Events.ERROR, function (_, d) {
+        if (!d.fatal) return;
+        if (++fatal > 3) { hls.destroy(); showError(T.loadErr, T.loadErrHint); return; }
+        if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+        else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+        else { hls.destroy(); showError(T.loadErr, T.loadErrHint); }
+      });
+      engine = {
+        levels: function () { return hls.levels.map(function (l, i) { return { i: i, h: l.height, b: l.bitrate }; }); },
+        set: function (i) { hls.currentLevel = i; },
+        current: -1
+      };
+      hls.on(Hls.Events.MANIFEST_PARSED, buildQuality);
+      hls.on(Hls.Events.LEVEL_SWITCHED, function (_, d) { engine.current = d.level; updateNow(); });
+      hls.loadSource(props.src); hls.attachMedia(video);
+    }, function () { if (nativeHls) { video.src = props.src; } else throw new Error("hls lib"); });
+  }
+
+  function startDash() {
+    return loadScript(CONFIG.dashLib).then(function () {
+      if (!window.dashjs || !dashjs.supportsMediaSource()) throw new Error("dash unsupported");
+      var p = dashjs.MediaPlayer().create();
+      p.updateSettings({ debug: { logLevel: dashjs.Debug.LOG_LEVEL_NONE }, streaming: { abr: { limitBitrateByPortal: true } } });
+      p.initialize(video, props.src, false);
+      p.on(dashjs.MediaPlayer.events.ERROR, function () { showError(T.loadErr, T.loadErrHint); });
+      engine = {
+        levels: function () { return (p.getBitrateInfoListFor("video") || []).map(function (l) { return { i: l.qualityIndex, h: l.height, b: l.bitrate }; }); },
+        set: function (i) {
+          p.updateSettings({ streaming: { abr: { autoSwitchBitrate: { video: i < 0 } } } });
+          if (i >= 0) p.setQualityFor("video", i, true);
+        },
+        current: -1
+      };
+      p.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, buildQuality);
+      p.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, function (e) {
+        if (e.mediaType === "video") { engine.current = e.newQuality; updateNow(); }
+      });
+    });
+  }
+
+  var ready = props.type === "hls" ? startHls() : props.type === "dash" ? startDash()
+            : (video.src = props.src, Promise.resolve());
+  ready.then(function () {
+    if (props.autoplay) {
+      var pr = video.play();
+      if (pr && pr.catch) pr.catch(function () { /* браузер заборонив автозапуск — чекаємо натискання */ });
+    }
+  }, function () { showError(T.loadErr, T.loadErrHint); });
+
+  video.addEventListener("error", function () {
+    if (!engine) showError(T.loadErr, T.loadErrHint);         // для hls/dash помилки обробляє бібліотека
+  });
+
+  // ---------- Відновлення позиції ----------
+  video.addEventListener("loadedmetadata", function () {
+    longVideo = video.duration >= 3600;
+    $("dur").textContent = fmt(video.duration);
+    $("cur").textContent = fmt(0);
+    var saved = parseFloat(load(storeKey));
+    if (props.start >= 0 && props.start < video.duration) video.currentTime = props.start;
+    else if (props.resume && saved > 5 && saved < video.duration - 10) { video.currentTime = saved; toast(T.resume + " " + fmt(saved)); }
+  });
+  var lastSave = 0;
+  video.addEventListener("timeupdate", function () {
+    if (!props.resume) return;
+    var now = Date.now();
+    if (now - lastSave > 5000) { lastSave = now; store(storeKey, video.currentTime.toFixed(1)); }
+  });
+  video.addEventListener("ended", function () { store(storeKey, null); });
+
+  // ---------- Відтворення ----------
+  function togglePlay() {
+    if (vp.classList.contains("failed")) return;
+    if (video.paused || video.ended) { var p = video.play(); if (p && p.catch) p.catch(function () {}); }
+    else video.pause();
+  }
+  function setPlaying(on) {
+    vp.classList.toggle("playing", on);
+    [$("centerBtn"), $("playBtn")].forEach(function (b) { b.classList.toggle("playing", on); label(b.id, on ? T.pause : T.play); });
+  }
+  $("centerBtn").onclick = togglePlay;
+  $("playBtn").onclick = togglePlay;
+  video.addEventListener("play", function () { vp.classList.add("started"); setPlaying(true); wake(); });
+  video.addEventListener("pause", function () { setPlaying(false); wake(); if (props.resume) store(storeKey, video.currentTime.toFixed(1)); });
+  video.addEventListener("ended", function () { setPlaying(false); wake(); });
+  video.addEventListener("waiting", function () { vp.classList.add("waiting"); });
+  ["playing", "canplay", "seeked", "pause"].forEach(function (e) { video.addEventListener(e, function () { vp.classList.remove("waiting"); }); });
+
+  function skip(d, silent) {
+    if (!isFinite(video.duration)) return;
+    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + d));
+    if (!silent) toast((d > 0 ? "+" : "−") + Math.abs(d) + " " + T.sec);
+    paint();
+  }
+  $("backBtn").onclick = function () { skip(-10); };
+  $("fwdBtn").onclick = function () { skip(10); };
+
+  // ---------- Прогрес ----------
+  var progress = $("progress"), dragging = false;
+  function pct(t) { return video.duration ? Math.min(100, (t / video.duration) * 100) : 0; }
+  function paint() {
+    var p = pct(video.currentTime);
+    $("played").style.width = p + "%"; $("thumb").style.left = p + "%";
+    $("cur").textContent = fmt(video.currentTime);
+    progress.setAttribute("aria-valuenow", Math.round(p));
+    progress.setAttribute("aria-valuetext", fmt(video.currentTime) + " / " + fmt(video.duration));
+    var b = video.buffered, end = 0;
+    for (var i = 0; i < b.length; i++) if (b.start(i) <= video.currentTime + 0.5) end = Math.max(end, b.end(i));
+    $("buffered").style.width = pct(end) + "%";
+  }
+  video.addEventListener("timeupdate", paint);
+  video.addEventListener("progress", paint);
+  function xToTime(x) { var r = progress.getBoundingClientRect(); return Math.max(0, Math.min(1, (x - r.left) / r.width)) * (video.duration || 0); }
+  progress.addEventListener("pointermove", function (e) {
+    var r = progress.getBoundingClientRect(), t = xToTime(e.clientX), tip = $("tip");
+    tip.textContent = fmt(t); tip.style.left = Math.max(26, Math.min(r.width - 26, e.clientX - r.left)) + "px";
+    if (dragging) { video.currentTime = t; paint(); }
+  });
+  progress.addEventListener("pointerdown", function (e) {
+    dragging = true; progress.classList.add("drag"); progress.setPointerCapture(e.pointerId);
+    video.currentTime = xToTime(e.clientX); paint();
+  });
+  function endDrag() { dragging = false; progress.classList.remove("drag"); }
+  progress.addEventListener("pointerup", endDrag);
+  progress.addEventListener("pointercancel", endDrag);
+  progress.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") { skip(-5, true); e.preventDefault(); e.stopPropagation(); }
+    if (e.key === "ArrowRight") { skip(5, true); e.preventDefault(); e.stopPropagation(); }
+  });
+
+  // ---------- Гучність ----------
+  var vol = $("vol");
+  function paintVol() {
+    var v = video.muted ? 0 : video.volume;
+    vol.value = v; vol.style.setProperty("--v", (v * 100) + "%");
+    var m = video.muted || video.volume === 0;
+    $("muteBtn").classList.toggle("is-muted", m); label("muteBtn", m ? T.unmute : T.mute);
+  }
+  var savedVol = parseFloat(load("uvp-volume"));
+  if (savedVol >= 0 && savedVol <= 1) video.volume = savedVol;
+  vol.addEventListener("input", function () {
+    video.volume = +vol.value; video.muted = +vol.value === 0; store("uvp-volume", vol.value);
+  });
+  $("muteBtn").onclick = function () { video.muted = !video.muted; if (!video.muted && video.volume === 0) video.volume = 0.5; };
+  video.addEventListener("volumechange", paintVol);
+  paintVol();
+
+  // ---------- Меню ----------
+  function closeMenus(except) {
+    document.querySelectorAll(".menu").forEach(function (m) {
+      if (m !== except) { m.classList.remove("open"); m.previousElementSibling.setAttribute("aria-expanded", "false"); }
+    });
+  }
+  function bindMenu(btn, menu) {
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation(); closeMenus(menu);
+      var open = menu.classList.toggle("open"); btn.setAttribute("aria-expanded", String(open)); wake();
+    });
+  }
+  document.addEventListener("click", function () { closeMenus(); });
+  function fillMenu(menu, heading, items) {
+    menu.innerHTML = ""; var h = document.createElement("h4"); h.textContent = heading; menu.appendChild(h);
+    items.forEach(function (it) {
+      var b = document.createElement("button"); b.type = "button";
+      b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(!!it.checked)); b.textContent = it.label;
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        menu.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-checked", "false"); });
+        b.setAttribute("aria-checked", "true"); it.pick(); closeMenus();
+      });
+      menu.appendChild(b);
+    });
+  }
+
+  var SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  function speedLabel(s) { return (s === 1 ? "1" : String(s).replace(".", ",")) + "×"; }
+  fillMenu($("speedMenu"), T.speed, SPEEDS.map(function (s) {
+    return { label: s === 1 ? T.normal : speedLabel(s), checked: s === (video.playbackRate || 1),
+             pick: function () { video.playbackRate = s; } };
+  }));
+  video.addEventListener("ratechange", function () { $("speedBtn").textContent = speedLabel(video.playbackRate); });
+  $("speedBtn").textContent = speedLabel(video.playbackRate || 1);
+  bindMenu($("speedBtn"), $("speedMenu"));
+
+  function buildQuality() {
+    if (!engine) return;
+    var seen = {}, list = engine.levels()
+      .filter(function (l) { return l.h; })
+      .sort(function (a, b) { return b.h - a.h || b.b - a.b; })
+      .filter(function (l) { if (seen[l.h]) return false; seen[l.h] = 1; return true; });
+    if (list.length < 2) return;
+    fillMenu($("qualityMenu"), T.quality, [{ label: T.auto, checked: true, pick: function () { engine.set(-1); toast(T.quality + ": " + T.auto); } }]
+      .concat(list.map(function (l) {
+        return { label: l.h + "p", pick: function () { engine.set(l.i); toast(T.quality + ": " + l.h + "p"); } };
+      })));
+    var now = document.createElement("div"); now.className = "now"; now.id = "qNow"; $("qualityMenu").appendChild(now);
+    $("qualityWrap").hidden = false;
+    updateNow();
+  }
+  function updateNow() {
+    var n = $("qNow"); if (!n || !engine) return;
+    var l = engine.levels().filter(function (x) { return x.i === engine.current; })[0];
+    n.textContent = l && l.h ? T.now + ": " + l.h + "p" : "";
+  }
+  bindMenu($("qualityBtn"), $("qualityMenu"));
+
+  // ---------- Повний екран ----------
+  function isFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  $("fsBtn").onclick = function () {
+    if (isFs()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+    var req = vp.requestFullscreen || vp.webkitRequestFullscreen;
+    if (req) {
+      var r = req.call(vp);
+      if (r && r.then && screen.orientation && screen.orientation.lock && video.videoWidth > video.videoHeight) {
+        r.then(function () { return screen.orientation.lock("landscape"); }).catch(function () {});
+      }
+    } else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();   // iPhone
+  };
+  ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) {
+    document.addEventListener(ev, function () { label("fsBtn", isFs() ? T.exitFs : T.fs); });
+  });
+
+  // ---------- Приховування панелі ----------
+  var idleTimer;
+  function wake() {
+    vp.classList.remove("idle"); clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () {
+      if (!video.paused && !dragging && !document.querySelector(".menu.open")) vp.classList.add("idle");
+    }, 2600);
+  }
+  vp.addEventListener("pointermove", function (e) { if (e.pointerType === "mouse") wake(); });
+  vp.addEventListener("keydown", wake);
+
+  // ---------- Жести на відео ----------
+  var gesture = $("gesture"), lastTap = 0, tapTimer = null;
+  function flash(side) {
+    var h = $(side < 0 ? "hintL" : "hintR"); h.classList.add("show");
+    setTimeout(function () { h.classList.remove("show"); }, 450);
+  }
+  var lastPointer = "mouse";
+  gesture.addEventListener("pointerdown", function (e) { lastPointer = e.pointerType || "mouse"; });
+  gesture.addEventListener("click", function () {
+    if (lastPointer === "touch") return;                       // дотики обробляє pointerup нижче
+    togglePlay();
+  });
+  gesture.addEventListener("dblclick", function () { $("fsBtn").click(); });
+  gesture.addEventListener("pointerup", function (e) {
+    if (e.pointerType !== "touch") return;
+    var now = Date.now(), r = vp.getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
+    if (now - lastTap < 320 && (x < 0.35 || x > 0.65)) {     // подвійний дотик збоку: ±10 с
+      clearTimeout(tapTimer); lastTap = 0;
+      var d = x < 0.5 ? -10 : 10; skip(d, true); flash(d); return;
+    }
+    lastTap = now;
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(function () {                        // одинарний дотик: показати / сховати панель
+      if (!vp.classList.contains("started")) { togglePlay(); return; }
+      if (vp.classList.contains("idle") || video.paused) wake(); else vp.classList.add("idle");
+    }, 320);
+  });
+
+  // ---------- Клавіатура ----------
+  document.addEventListener("keydown", function (e) {
+    if (e.target.tagName === "INPUT" || e.altKey || e.ctrlKey || e.metaKey) return;
+    switch (e.key) {
+      case " ": case "k": togglePlay(); e.preventDefault(); break;
+      case "ArrowLeft": case "j": skip(-10); e.preventDefault(); break;
+      case "ArrowRight": case "l": skip(10); e.preventDefault(); break;
+      case "ArrowUp": video.muted = false; video.volume = Math.min(1, video.volume + 0.1); e.preventDefault(); break;
+      case "ArrowDown": video.volume = Math.max(0, video.volume - 0.1); e.preventDefault(); break;
+      case "f": $("fsBtn").click(); break;
+      case "m": video.muted = !video.muted; break;
+    }
+  });
+})();
+</script>
+</body>
+</html>
