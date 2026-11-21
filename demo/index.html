@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uniplayer: демо и отладка</title>
+<style>
+  :root { --bg: #f5f5f6; --card: #fff; --fg: #1b1a1f; --muted: #6b6b76; --line: #e2e2e6; --ok: #1a7f4b; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #151418; --card: #1f1e24; --fg: #ececec; --muted: #9a9aa6; --line: #33323a; --ok: #5ccf8f; --bad: #ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 16px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+  header { grid-column: 1 / -1; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 0 0 10px; }
+  header p, .note { color: var(--muted); margin: 0; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+  .wide { grid-column: 1 / -1; }
+  iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; border-radius: 8px; background: #000; }
+  form { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 12px; }
+  label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  label.check { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--fg); }
+  label.full { grid-column: 1 / -1; }
+  input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+  button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
+  button.primary { background: var(--fg); color: var(--card); border-color: var(--fg); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  pre, code { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { margin: 8px 0 0; padding: 10px; background: var(--bg); border-radius: 8px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+  #log { height: 220px; white-space: pre; word-break: normal; }
+  .scroll { overflow: auto; max-height: 320px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; word-break: break-word; }
+  th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .on { color: var(--ok); } .off { color: var(--muted); } .bad { color: var(--bad); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Uniplayer: демо и отладка</h1>
+    <p>Плеер встроен через iframe с другого адреса, как на стороннем сайте. Страница показывает, что он получил из адреса и из файла настроек, какие события отправляет и что попало в базу.</p>
+  </header>
+
+  <section>
+    <h2>Плеер</h2>
+    <iframe id="player" allow="autoplay; fullscreen"></iframe>
+    <div class="row">
+      <button data-cmd="play">play</button>
+      <button data-cmd="pause">pause</button>
+      <button data-cmd="seek" data-value="60">seek 60</button>
+      <button data-cmd="mute">mute</button>
+      <button data-cmd="mute" data-value="false">unmute</button>
+      <button data-cmd="volume" data-value="0.5">volume 0.5</button>
+      <span class="note">команды через postMessage</span>
+    </div>
+    <pre id="snippet"></pre>
+  </section>
+
+  <section>
+    <h2>Параметры в адресе iframe</h2>
+    <form id="form">
+      <label class="full">Видео
+        <select name="preset">
+          <option value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">HLS, 5 качеств (Big Buck Bunny, 10 мин)</option>
+          <option value="https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8">HLS с субтитрами внутри потока (Apple)</option>
+          <option value="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm">WebM-файл, 5 секунд (удобно для проверки «досмотрел»)</option>
+          <option value="">своя ссылка →</option>
+        </select>
+      </label>
+      <label class="full">src (своя ссылка) или v (короткая запись)
+        <input type="text" name="custom" placeholder="https://…/master.m3u8  или  v=курс/урок">
+      </label>
+      <label>title <input type="text" name="title" value="Демо-урок"></label>
+      <label>wm (водяной знак зрителя) <input type="text" name="wm" value="viewer@example.com"></label>
+      <label>subs <input type="text" name="subs" placeholder="uk:https://…/uk.vtt"></label>
+      <label>accent <input type="text" name="accent" placeholder="e3262f"></label>
+      <label>lang <select name="lang"><option value="">авто</option><option>uk</option><option>ru</option><option>en</option></select></label>
+      <label>t (старт) <input type="text" name="t" placeholder="1:30"></label>
+      <label>speed <input type="text" name="speed" placeholder="1.25"></label>
+      <label>fit <select name="fit"><option value="">contain</option><option>cover</option></select></label>
+      <label class="check"><input type="checkbox" name="autoplay"> autoplay</label>
+      <label class="check"><input type="checkbox" name="muted"> muted</label>
+      <label class="check"><input type="checkbox" name="loop"> loop</label>
+      <label class="check"><input type="checkbox" name="noseek"> noseek</label>
+      <label class="check"><input type="checkbox" name="resume0"> resume=0</label>
+      <label class="full row"><button class="primary" type="submit">Применить и перезагрузить плеер</button></label>
+    </form>
+  </section>
+
+  <section class="wide">
+    <h2>Что получил плеер <span class="note" id="state"></span></h2>
+    <div class="cols">
+      <div><h2>Из адреса (props)</h2><div class="scroll"><table id="props"></table></div></div>
+      <div><h2>Из файла настроек (demo/player.config.js)</h2><div class="scroll"><table id="config"></table></div></div>
+      <div><h2>Состояние</h2><div class="scroll"><table id="status"></table></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>События от плеера (postMessage)</h2>
+    <div class="row" style="margin-top:0">
+      <label class="check"><input type="checkbox" id="showTime"> показывать timeupdate</label>
+      <button id="clearLog">Очистить</button>
+    </div>
+    <pre id="log"></pre>
+  </section>
+
+  <section>
+    <h2>База событий (SQLite) <span class="note" id="dbState"></span></h2>
+    <div class="row" style="margin-top:0">
+      <label class="check"><input type="checkbox" id="way1"> способ 1: страница тоже пишет события в базу (source = page)</label>
+      <button id="clearDb">Очистить базу</button>
+    </div>
+    <p class="note" style="margin-top:8px">Способ 2 (source = player) включён настройкой <code>analytics</code> в demo/player.config.js.</p>
+    <h2 style="margin-top:14px">Воронка по видео</h2>
+    <div class="scroll"><table id="funnel"></table></div>
+    <h2 style="margin-top:14px">Последние события</h2>
+    <div class="scroll"><table id="db"></table></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var frame = $("player"), form = $("form");
+  // Плеер грузится с другого имени того же сервера (localhost ↔ 127.0.0.1): для браузера это чужой сайт, как в реальном встраивании
+  var other = { "localhost": "127.0.0.1", "127.0.0.1": "localhost" }[location.hostname];
+  var PLAYER = (other ? location.protocol + "//" + other + ":" + location.port : "") + "/player/index.html";
+
+  // ---------- Таблицы: только текст, никакого HTML из данных ----------
+  function fillTable(table, head, rows) {
+    table.textContent = "";
+    function line(cells, tag) {
+      var tr = document.createElement("tr");
+      cells.forEach(function (c) {
+        var el = document.createElement(tag);
+        if (c && c.cls) { el.className = c.cls; el.textContent = c.text; } else el.textContent = c === null || c === undefined ? "" : String(c);
+        tr.appendChild(el);
+      });
+      table.appendChild(tr);
+    }
+    if (head) line(head, "th");
+    rows.forEach(function (r) { line(r, "td"); });
+  }
+  function show(v) {                                            // значение настройки → ячейка с цветом
+    if (v === true) return { cls: "on", text: "включено" };
+    if (v === false) return { cls: "off", text: "выключено" };
+    if (v === null || v === undefined || v === "" || (typeof v === "number" && isNaN(v)) || (Array.isArray(v) && !v.length)) return { cls: "off", text: "не задано" };
+    return Array.isArray(v) ? v.join(", ") : String(v);
+  }
+  function objectRows(o) { return Object.keys(o).map(function (k) { return [k, show(o[k])]; }); }
+
+  // ---------- Адрес iframe из формы ----------
+  function buildUrl() {
+    var f = form.elements, q = new URLSearchParams(), custom = f.custom.value.trim();
+    if (f.preset.value) q.set("src", f.preset.value);
+    else if (/^v=/.test(custom)) q.set("v", custom.slice(2));
+    else if (custom) q.set("src", custom);
+    ["title", "wm", "subs", "accent", "lang", "t", "speed", "fit"].forEach(function (n) { if (f[n].value.trim()) q.set(n, f[n].value.trim()); });
+    ["autoplay", "muted", "loop", "noseek"].forEach(function (n) { if (f[n].checked) q.set(n, "1"); });
+    if (f.resume0.checked) q.set("resume", "0");
+    return PLAYER + "?" + q.toString();
+  }
+  var status = {};
+  function paintStatus() { fillTable($("status"), null, objectRows(status)); }
+  function reload() {
+    var url = buildUrl();
+    status = {}; paintStatus();
+    fillTable($("props"), null, []); fillTable($("config"), null, []);
+    $("state").textContent = "— ждём событие init…";
+    $("snippet").textContent = '<iframe src="' + url + '"\n        style="width:100%;aspect-ratio:16/9;border:0"\n        allow="autoplay; fullscreen"></iframe>';
+    frame.style.aspectRatio = "";
+    frame.src = url;
+  }
+  form.addEventListener("submit", function (e) { e.preventDefault(); reload(); });
+
+  // ---------- Команды плееру ----------
+  document.querySelectorAll("button[data-cmd]").forEach(function (b) {
+    b.onclick = function () {
+      var msg = { target: "uniplayer", command: b.dataset.cmd };
+      if (b.dataset.value) msg.value = JSON.parse(b.dataset.value);
+      frame.contentWindow.postMessage(msg, "*");
+    };
+  });
+
+  // ---------- События от плеера ----------
+  function time() { return new Date().toTimeString().slice(0, 8); }
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (e.source !== frame.contentWindow || !d || d.source !== "uniplayer") return;
+
+    if (d.event === "init") {                                   // плеер сообщает, что он прочитал
+      fillTable($("props"), null, objectRows(d.props));
+      fillTable($("config"), null, objectRows(d.config));
+      $("state").textContent = "";
+    }
+    if (d.event === "ready") {
+      status["формат"] = d.type; status["движок"] = d.engine; status["размер видео"] = d.videoWidth + "×" + d.videoHeight;
+      if (d.videoWidth) frame.style.aspectRatio = d.videoWidth + " / " + d.videoHeight;   // рамка под пропорции видео
+    }
+    if (d.event === "error") status["ошибка"] = { cls: "bad", text: d.message };
+    status["последнее событие"] = d.event;
+    status["позиция"] = Math.round(d.currentTime) + " / " + Math.round(d.duration) + " с";
+    paintStatus();
+
+    if (d.event !== "timeupdate" || $("showTime").checked) {
+      var extra = Object.keys(d).filter(function (k) { return ["source", "event", "props", "config"].indexOf(k) < 0; })
+        .map(function (k) { return k + "=" + (typeof d[k] === "number" ? Math.round(d[k] * 10) / 10 : d[k]); }).join("  ");
+      $("log").textContent = time() + "  " + d.event.padEnd(11) + extra + "\n" + $("log").textContent.slice(0, 20000);
+    }
+
+    // Способ 1: аналитику ведёт страница-хозяин — так же, как на реальном сайте с GA4 или своим сервером
+    if ($("way1").checked && ["start", "progress", "complete", "error"].indexOf(d.event) >= 0) {
+      fetch("/api/events", { method: "POST", body: JSON.stringify({
+        source: "page", event: d.event, percent: d.percent, currentTime: Math.round(d.currentTime),
+        video: new URL(frame.src).searchParams.get("src") || new URL(frame.src).searchParams.get("v"),
+        viewer: form.elements.wm.value, page: location.origin
+      }) }).then(loadDb);
+    }
+  });
+  $("clearLog").onclick = function () { $("log").textContent = ""; };
+
+  // ---------- База ----------
+  var STEPS = ["start", "25", "50", "75", "90", "complete"];
+  function loadDb() {
+    return fetch("/api/events").then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (rows) {
+      $("dbState").textContent = "— записей: " + rows.length + (rows.length === 200 ? "+" : "");
+      fillTable($("db"), ["время", "source", "событие", "%", "позиция, с", "зритель", "видео"], rows.map(function (r) {
+        return [r.ts, r.source, r.event === "error" ? { cls: "bad", text: "error" } : r.event, r.percent, r.position, r.viewer, r.video.split("/").slice(-2).join("/")];
+      }));
+      var by = {};                                              // видео + source → сколько сеансов дошли до каждого шага
+      rows.forEach(function (r) {
+        var key = r.video.split("/").slice(-2).join("/") + " · " + r.source, step = r.event === "progress" ? String(r.percent) : r.event;
+        by[key] = by[key] || {};
+        if (STEPS.indexOf(step) >= 0) by[key][step] = (by[key][step] || 0) + 1;
+      });
+      fillTable($("funnel"), ["видео · source"].concat(STEPS.map(function (s) { return /^\d/.test(s) ? s + "%" : s; })),
+        Object.keys(by).map(function (k) { return [k].concat(STEPS.map(function (s) { return by[k][s] || 0; })); }));
+    }).catch(function () {
+      $("dbState").textContent = "— база недоступна: запустите npm run dev в папке demo";
+    });
+  }
+  $("clearDb").onclick = function () { fetch("/api/events", { method: "DELETE" }).then(loadDb); };
+  setInterval(loadDb, 2000);
+  loadDb();
+
+  reload();
+})();
+</script>
+</body>
+</html>

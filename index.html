@@ -52,7 +52,8 @@
   /* ---------- Велика кнопка по центру ---------- */
   .center { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; transform: translate(-50%, -50%);
     transition: opacity .2s ease, transform .2s ease; filter: drop-shadow(0 4px 18px rgba(0,0,0,.35)); }
-  .vp.playing .center, .vp.waiting .center, .vp.failed .center { opacity: 0; pointer-events: none; transform: translate(-50%, -50%) scale(.9); }
+  /* лише до першого запуску: далі її дублює кнопка в панелі */
+  .vp.started .center, .vp.playing .center, .vp.waiting .center, .vp.failed .center { opacity: 0; pointer-events: none; transform: translate(-50%, -50%) scale(.9); }
 
   .spinner { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%;
     border: 3px solid rgba(255,255,255,.2); border-top-color: var(--accent); animation: spin .8s linear infinite; display: none; pointer-events: none; }
@@ -63,7 +64,10 @@
   .controls { position: absolute; left: 0; right: 0; bottom: 0; padding: 36px 22px 14px;
     background: linear-gradient(to top, rgba(22,21,26,.94) 0%, rgba(22,21,26,.75) 55%, rgba(22,21,26,0) 100%);
     transition: opacity .25s ease; }
-  .vp:not(.started) .controls { opacity: 0; pointer-events: none; }
+  /* до першого запуску панель схована, але з'являється, коли курсор унизу (або фокус з клавіатури) */
+  .vp:not(.started) .controls { opacity: 0; }
+  .vp:not(.started) .controls:hover, .vp:not(.started) .controls:focus-within { opacity: 1; }
+  @media (hover: none) { .vp:not(.started) .controls { pointer-events: none; } }
   .vp.started.idle .controls, .vp.started.idle .top { opacity: 0; pointer-events: none; }
   .vp.started.idle { cursor: none; }
 
@@ -109,6 +113,7 @@
   .ibtn.txt { width: auto; min-width: 38px; padding: 0 10px; border-radius: 19px; font-weight: 500; font-size: 13px; }
   @media (hover: hover) { .ibtn:hover { background: var(--hover-fill); } }
   .ibtn:active, .ibtn[aria-expanded="true"] { background: var(--hover-fill); }
+  .ibtn.on { text-decoration: underline 2px var(--accent); text-underline-offset: 5px; }
   .i-muted { display: none; }
   .is-muted .i-muted { display: inline; }
   .is-muted .i-vol { display: none; }
@@ -137,6 +142,17 @@
   .toast { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); padding: 8px 14px; border-radius: 10px;
     font-size: 13px; opacity: 0; transition: opacity .2s ease; pointer-events: none; white-space: nowrap; }
   .toast.show { opacity: 1; }
+
+  /* ---------- Субтитри та водяний знак: піднімаються, коли видно панель ---------- */
+  .subs { position: absolute; left: 12%; right: 12%; bottom: 150px; text-align: center; pointer-events: none; transition: bottom .25s ease; }
+  .subs span { display: inline-block; background: rgba(0,0,0,.72); color: #fff; padding: 3px 10px; border-radius: 6px; white-space: pre-line;
+    font-size: clamp(14px, 2.6vw, 26px); line-height: 1.35; }
+  .subs span:empty { display: none; }
+  .wm { position: absolute; right: 18px; bottom: 108px; text-align: right; pointer-events: none; color: #fff; opacity: .45;
+    font-size: clamp(11px, 1.5vw, 15px); line-height: 1.4; text-shadow: 0 1px 2px rgba(0,0,0,.6); transition: bottom .25s ease; }
+  .vp.started.idle .subs, .vp:not(.started):not(:has(.controls:hover)) .subs { bottom: 56px; }
+  .vp.started.idle .wm, .vp:not(.started):not(:has(.controls:hover)) .wm { bottom: 14px; }
+  .vp.failed .subs, .vp.failed .wm { display: none; }
   .hint { position: absolute; top: 50%; width: 64px; height: 64px; margin-top: -32px; border-radius: 50%; background: rgba(0,0,0,.55);
     display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
   .hint.l { left: 14%; } .hint.r { right: 14%; }
@@ -168,6 +184,7 @@
     .center { width: 64px; height: 64px; }
     .top { padding: 10px 12px 30px; } .title { font-size: 14px; }
     .ptime { font-size: 11.5px; padding: 3px 7px; }
+    .subs { bottom: 124px; } .wm { right: 12px; bottom: 92px; }
   }
   @media (max-width: 380px) { .bar .right .speed-wrap { display: none; } }
 </style>
@@ -190,6 +207,8 @@
   <div class="hint l" id="hintL"><svg viewBox="0 0 24 24"><path d="M11.5 6.5v11L4 12zM20 6.5v11L12.5 12z"/></svg></div>
   <div class="hint r" id="hintR"><svg viewBox="0 0 24 24"><path d="M12.5 6.5v11L20 12zM4 6.5v11l7.5-5.5z"/></svg></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="subs" id="subs"><span></span></div>
+  <div class="wm" id="wm" aria-hidden="true"></div>
   <div class="error" id="error"><div id="errorText"></div></div>
 
   <div class="controls" id="controls">
@@ -242,6 +261,10 @@
       </div>
 
       <div class="right">
+        <div class="menu-wrap" id="ccWrap" hidden>
+          <button class="ibtn txt" id="ccBtn" aria-haspopup="true" aria-expanded="false">CC</button>
+          <div class="menu" id="ccMenu" role="menu"></div>
+        </div>
         <div class="menu-wrap speed-wrap">
           <button class="ibtn txt" id="speedBtn" aria-haspopup="true" aria-expanded="false">1×</button>
           <div class="menu" id="speedMenu" role="menu"></div>
@@ -276,10 +299,13 @@
   // =====================================================================
   var CONFIG = Object.assign({
     defaultBase: "",                                // адреса CDN для короткого ?v=папка/відео; "" — короткий запис вимкнено
-    allowedHosts: [],                               // [] — будь-які сайти; або ["cdn.example.com", "*.b-cdn.net"]
+    allowedHosts: [],                               // звідки дозволено відео: ["cdn.example.com", "*.b-cdn.net", "site.com/video/"]; [] — звідусіль
+    allowedParents: [],                             // де дозволено вбудовувати плеєр в iframe (той самий формат); [] — будь-де
+    analytics: "",                                  // адреса, куди плеєр сам надсилає події перегляду; "" — не надсилає
+    watermark: "",                                  // водяний знак каналу (текст) у правому нижньому куті; wm= з посилання додається до нього
     autoPoster: false,                              // true — шукати poster.jpg поруч із master.m3u8
     seek: true,                                     // false — заборонити перемотування для ВСІХ відео цього файлу (посилання не зможе ввімкнути)
-    hlsLib:  "https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js",
+    hlsLib: ["hls.min.js", "https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js"],   // пробуються по черзі: копія поруч, далі зовнішня
     accent: "",                                     // колір за замовчуванням, HEX; "" — нейтральний білий
     lang: ""                                        // "" — мова браузера глядача (uk / ru / en), запасна en
   }, window.UNIPLAYER_CONFIG);
@@ -291,21 +317,21 @@
           resume: "Продовжуємо з", noSrc: "Відео не вказано", noSrcHint: "Додайте до адреси <code>?src=посилання-на-відео</code>",
           badSrc: "Це посилання не підтримується", badSrcHint: "Потрібне посилання https:// на відео з дозволеного сайту",
           loadErr: "Не вдалося завантажити відео", loadErrHint: "Перевірте з'єднання та оновіть сторінку", sec: "с",
-          noSeek: "Перемотування вимкнено" },
+          noSeek: "Перемотування вимкнено", subs: "Субтитри", off: "Вимк.", noEmbed: "Вбудовування на цьому сайті не дозволено" },
     ru: { play: "Воспроизвести", pause: "Пауза", back: "Назад на 10 секунд", fwd: "Вперёд на 10 секунд", mute: "Выключить звук",
           unmute: "Включить звук", volume: "Громкость", seek: "Перемотка", speed: "Скорость", normal: "Обычная",
           quality: "Качество", auto: "Авто", now: "Сейчас", fs: "На весь экран", exitFs: "Выйти из полноэкранного режима",
           resume: "Продолжаем с", noSrc: "Видео не указано", noSrcHint: "Добавьте к адресу <code>?src=ссылка-на-видео</code>",
           badSrc: "Эта ссылка не поддерживается", badSrcHint: "Нужна ссылка https:// на видео с разрешённого сайта",
           loadErr: "Не удалось загрузить видео", loadErrHint: "Проверьте соединение и обновите страницу", sec: "с",
-          noSeek: "Перемотка отключена" },
+          noSeek: "Перемотка отключена", subs: "Субтитры", off: "Выкл.", noEmbed: "Встраивание на этом сайте не разрешено" },
     en: { play: "Play", pause: "Pause", back: "Back 10 seconds", fwd: "Forward 10 seconds", mute: "Mute",
           unmute: "Unmute", volume: "Volume", seek: "Seek", speed: "Speed", normal: "Normal",
           quality: "Quality", auto: "Auto", now: "Now", fs: "Fullscreen", exitFs: "Exit fullscreen",
           resume: "Resuming from", noSrc: "No video specified", noSrcHint: "Add <code>?src=video-url</code> to the address",
           badSrc: "This link is not supported", badSrcHint: "Use an https:// link to a video on an allowed site",
           loadErr: "Could not load the video", loadErrHint: "Check your connection and reload the page", sec: "s",
-          noSeek: "Seeking is disabled" }
+          noSeek: "Seeking is disabled", subs: "Subtitles", off: "Off", noEmbed: "Embedding on this site is not allowed" }
   };
 
   // =====================================================================
@@ -324,19 +350,27 @@
   var vp = $("vp"), video = $("video");
 
   // ---------- Події для сторінки-господаря (плеєр в iframe) ----------
-  var framed = window.parent !== window;
+  function tryUrl(s) { try { return new URL(s); } catch (e) { return null; } }
+  var framed = window.parent !== window, restricted = CONFIG.allowedParents.length > 0;
+  var ref = tryUrl(document.referrer);                          // Firefox не має ancestorOrigins — там лише referrer
+  var parentOrigin = !framed ? "" : (location.ancestorOrigins && location.ancestorOrigins[0]) || (ref ? ref.origin : "");
+  // повну адресу сторінки-господаря браузер дає не завжди (з іншого сайту — зазвичай лише домен)
+  var parentUrl = ref && ref.origin === parentOrigin ? ref : tryUrl(parentOrigin);
   function emit(event, extra) {
-    if (!framed) return;
-    // "*" — сторінка-господар невідома заздалегідь; у повідомленні лише стан відтворення, без посилання на відео
+    // без обмежень сторінка-господар невідома заздалегідь, тому "*"; у повідомленні лише стан відтворення, без посилання на відео
+    var to = restricted ? parentOrigin : "*";
+    if (!framed || !to) return;
     window.parent.postMessage(Object.assign({ source: "uniplayer", event: event,
-      currentTime: video.currentTime || 0, duration: video.duration || 0 }, extra), "*");
+      currentTime: video.currentTime || 0, duration: video.duration || 0 }, extra), to);
   }
 
-  function hostAllowed(h) {
-    if (!CONFIG.allowedHosts.length) return true;
-    return CONFIG.allowedHosts.some(function (a) {
-      a = a.toLowerCase();
-      return a.indexOf("*.") === 0 ? (h === a.slice(2) || h.slice(-(a.length - 1)) === a.slice(1)) : h === a;
+  function urlIn(list, u) {                                     // запис: "site.com", "*.site.com" або з початком шляху "site.com/courses/"
+    var h = u.hostname.toLowerCase();
+    return list.some(function (a) {
+      a = String(a).replace(/^https?:\/\//i, "");
+      var i = a.indexOf("/"), host = (i < 0 ? a : a.slice(0, i)).toLowerCase(), path = i < 0 ? "/" : a.slice(i);
+      var hostOk = host.indexOf("*.") === 0 ? (h === host.slice(2) || h.slice(-(host.length - 1)) === host.slice(1)) : h === host;
+      return hostOk && u.pathname.indexOf(path) === 0;
     });
   }
   function safeUrl(raw, checkHost) {
@@ -345,7 +379,7 @@
     try { u = new URL(raw, location.href); } catch (e) { return null; }
     var httpOk = location.protocol !== "https:";                  // http — лише коли сама сторінка не https
     if (!(u.protocol === "https:" || (u.protocol === "http:" && httpOk))) return null;
-    if (checkHost && !hostAllowed(u.hostname.toLowerCase())) return null;
+    if (checkHost && CONFIG.allowedHosts.length && !urlIn(CONFIG.allowedHosts, u)) return null;
     return u;
   }
   function fromShortPath(p) {                                   // ?v=amm/urok -> CDN/amm/urok/master.m3u8
@@ -393,6 +427,19 @@
     seek: CONFIG.seek !== false && flag("seek", true) && !flag("noseek", false),   // посилання може лише заборонити, не дозволити
     fit: prop("fit")
   };
+  emit("init", { props: props, config: CONFIG });               // для налагодження: що плеєр отримав з адреси та з файлу налаштувань
+
+  // ---------- Аналітика: ті самі події йдуть сторінці-господарю (postMessage) і на адресу CONFIG.analytics ----------
+  var session = Math.random().toString(36).slice(2), marks = {};
+  function track(event, extra) {
+    emit(event, extra);
+    if (!CONFIG.analytics || !navigator.sendBeacon) return;
+    // тіло — рядок, а не JSON-тип: так браузер не робить попередній CORS-запит до чужого сервера
+    navigator.sendBeacon(CONFIG.analytics, JSON.stringify(Object.assign({
+      event: event, session: session, video: props.src ? props.src.split("?")[0] : "", title: props.title, viewer: prop("wm"),
+      page: parentOrigin || location.origin, currentTime: Math.round(video.currentTime || 0), duration: Math.round(video.duration || 0)
+    }, extra)));
+  }
 
   // ---------- Оформлення ----------
   if (props.embed) document.body.classList.add("embed");
@@ -425,9 +472,14 @@
     document.title = props.title;
   }
 
+  [CONFIG.watermark, prop("wm")].forEach(function (w) {         // знак із налаштувань показується завжди; wm= з посилання лише додається до нього
+    if (!w) return;
+    var d = document.createElement("div"); d.textContent = String(w).slice(0, 80); $("wm").appendChild(d);
+  });
+
   function label(id, text) { var el = $(id); el.setAttribute("aria-label", text); el.title = text; }
   label("centerBtn", T.play); label("playBtn", T.play); label("backBtn", T.back); label("fwdBtn", T.fwd);
-  label("muteBtn", T.mute); label("speedBtn", T.speed); label("qualityBtn", T.quality); label("fsBtn", T.fs);
+  label("muteBtn", T.mute); label("speedBtn", T.speed); label("qualityBtn", T.quality); label("fsBtn", T.fs); label("ccBtn", T.subs);
   $("vol").setAttribute("aria-label", T.volume); $("progress").setAttribute("aria-label", T.seek);
 
   function showError(title, hint) {
@@ -436,7 +488,11 @@
     $("errorText").querySelector("span").innerHTML = hint;      // hint — лише з I18N, не з адреси
     vp.classList.add("failed", "started");
     vp.classList.remove("waiting");
-    emit("error", { message: title });
+    track("error", { message: title });
+  }
+
+  if (framed && restricted) {                                   // перевірка в браузері; надійний захист — заголовок CSP frame-ancestors на хостингу
+    if (!parentUrl || !urlIn(CONFIG.allowedParents, parentUrl)) { showError(T.noEmbed, ""); return; }
   }
 
   if (!props.src || props.type === "dash") {                    // DASH прибрано: HLS працює в тих самих браузерах
@@ -489,13 +545,20 @@
 
   video.muted = props.muted || props.autoplay;
   video.loop = props.loop;
-  if (props.speed >= 0.25 && props.speed <= 4) { video.defaultPlaybackRate = video.playbackRate = props.speed; }
+  var startSpeed = props.speed || parseFloat(load("uvp-speed"));   // speed= з посилання важливіший за збережений вибір глядача
+  if (startSpeed >= 0.25 && startSpeed <= 4) { video.defaultPlaybackRate = video.playbackRate = startSpeed; }
 
+  function loadHls() {                                          // адреси з hlsLib по черзі, доки одна не дасть робочу бібліотеку
+    return [].concat(CONFIG.hlsLib).reduce(function (p, url) {
+      return p.catch(function () { return loadScript(url).then(function () { if (!window.Hls) throw new Error("not hls " + url); }); });
+    }, Promise.reject(new Error("no hlsLib")));
+  }
   function startHls() {
     if (!mseOk && nativeHls) { video.src = props.src; return Promise.resolve(); }
-    return loadScript(CONFIG.hlsLib).then(function () {
+    return loadHls().then(function () {
       if (!window.Hls || !Hls.isSupported()) { if (nativeHls) { video.src = props.src; return; } throw new Error("hls unsupported"); }
-      var hls = new Hls({ capLevelToPlayerSize: true, maxBufferLength: 30 });
+      // renderTextTracksNatively: false — субтитри з потоку приходять подіями й малюються власним шаром
+      var hls = new Hls({ capLevelToPlayerSize: true, maxBufferLength: 30, renderTextTracksNatively: false, enableCEA708Captions: false });
       var fatal = 0;
       hls.on(Hls.Events.FRAG_BUFFERED, function () { fatal = 0; });   // рахуємо лише збої поспіль, а не за весь перегляд
       hls.on(Hls.Events.ERROR, function (_, d) {
@@ -510,6 +573,27 @@
         set: function (i) { hls.currentLevel = i; },
         current: -1
       };
+      var hlsTT = [];
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function (_, d) {
+        if (hlsTT.length) return;
+        d.subtitleTracks.forEach(function (t, i) {
+          if (t.forced) return;                                 // «forced» — лише переклад написів у кадрі, у меню не потрібні
+          var tt = video.addTextTrack("subtitles", t.name || t.lang || "CC", t.lang || "");
+          tt.mode = "disabled"; tt._seen = {};
+          tt._pick = function (on) { hls.subtitleTrack = on ? i : -1; };
+          hlsTT[i] = tt;
+        });
+        hls.subtitleDisplay = false;                            // hls.js сам перемикає режими доріжок: хай ставить hidden, а не showing
+        hls.subtitleTrack = -1;                                 // вмикає лише глядач (або збережений вибір)
+      });
+      hls.on(Hls.Events.CUES_PARSED, function (_, d) {
+        var tt = hlsTT[hls.subtitleTrack];
+        if (d.type !== "subtitles" || !tt) return;
+        d.cues.forEach(function (c) {                           // фрагмент може завантажитися повторно — без дублікатів
+          var k = c.startTime + "|" + c.text;
+          if (!tt._seen[k]) { tt._seen[k] = 1; tt.addCue(new VTTCue(c.startTime, c.endTime, c.text)); }
+        });
+      });
       hls.on(Hls.Events.MANIFEST_PARSED, buildQuality);
       hls.on(Hls.Events.LEVEL_SWITCHED, function (_, d) { engine.current = d.level; updateNow(); });
       hls.loadSource(props.src); hls.attachMedia(video);
@@ -674,7 +758,8 @@
     if (!window.Hls) return;                                    // бібліотека ще вантажиться — спробуємо при наступному наведенні
     if (!Hls.isSupported()) { previewOff(); return; }
     pv.addEventListener("loadedmetadata", sizePreview);
-    var h = new Hls({ autoStartLoad: false, capLevelToPlayerSize: false, maxBufferLength: 2, maxMaxBufferLength: 4, backBufferLength: 0 });
+    var h = new Hls({ autoStartLoad: false, capLevelToPlayerSize: false, maxBufferLength: 2, maxMaxBufferLength: 4, backBufferLength: 0,
+      enableWebVTT: false, enableCEA708Captions: false });
     h.on(Hls.Events.MANIFEST_PARSED, function () {
       var low = 0;
       h.levels.forEach(function (l, i) { if ((l.height || 1e9) < (h.levels[low].height || 1e9)) low = i; });
@@ -735,6 +820,15 @@
     btn.addEventListener("click", function (e) {
       e.stopPropagation(); closeMenus(menu);
       var open = menu.classList.toggle("open"); btn.setAttribute("aria-expanded", String(open)); wake();
+      var first = menu.querySelector('[aria-checked="true"]') || menu.querySelector("button");
+      if (open && first) first.focus();
+    });
+    menu.addEventListener("keydown", function (e) {             // стрілки — по пунктах, Escape — закрити
+      var items = [].slice.call(menu.querySelectorAll("button")), i = items.indexOf(document.activeElement);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
+        e.preventDefault(); e.stopPropagation();
+      } else if (e.key === "Escape") { closeMenus(); btn.focus(); e.stopPropagation(); }
     });
   }
   document.addEventListener("click", function () { closeMenus(); });
@@ -746,7 +840,7 @@
       b.addEventListener("click", function (e) {
         e.stopPropagation();
         menu.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-checked", "false"); });
-        b.setAttribute("aria-checked", "true"); it.pick(); closeMenus();
+        b.setAttribute("aria-checked", "true"); closeMenus(); menu.previousElementSibling.focus(); it.pick();
       });
       menu.appendChild(b);
     });
@@ -756,7 +850,7 @@
   function speedLabel(s) { return (s === 1 ? "1" : String(s).replace(".", ",")) + "×"; }
   fillMenu($("speedMenu"), T.speed, SPEEDS.map(function (s) {
     return { label: s === 1 ? T.normal : speedLabel(s), checked: s === (video.playbackRate || 1),
-             pick: function () { video.playbackRate = s; } };
+             pick: function () { video.playbackRate = s; store("uvp-speed", s); } };
   }));
   video.addEventListener("ratechange", function () { $("speedBtn").textContent = speedLabel(video.playbackRate); });
   $("speedBtn").textContent = speedLabel(video.playbackRate || 1);
@@ -783,6 +877,58 @@
     n.textContent = l && l.h ? T.now + ": " + l.h + "p" : "";
   }
   bindMenu($("qualityBtn"), $("qualityMenu"));
+
+  // ---------- Субтитри: будь-які текстові доріжки відео малюємо власним шаром над панеллю ----------
+  var subsBox = $("subs").firstChild, subsTouched = false;
+  function subTracks() { return [].filter.call(video.textTracks, function (t) { return t.kind === "subtitles" || t.kind === "captions"; }); }
+  function subKey(t) { return t.language || t.label; }
+  function renderCues() {
+    var lines = [];
+    subTracks().forEach(function (t) {
+      if (t.mode !== "hidden" || !t.activeCues) return;
+      [].forEach.call(t.activeCues, function (c) { lines.push(String(c.text).replace(/<[^>]+>/g, "")); });
+    });
+    subsBox.textContent = lines.join("\n");                     // лише текст — жодного HTML із файлу субтитрів
+  }
+  function pickSub(track) {
+    subTracks().forEach(function (t) { if (t._pick) t._pick(false); });   // спершу hls.js (він скидає режими доріжок), потім наші режими
+    if (track && track._pick) track._pick(true);
+    subTracks().forEach(function (t) { t.mode = t === track ? "hidden" : "disabled"; });
+    $("ccBtn").classList.toggle("on", !!track);
+    renderCues(); buildSubs();
+  }
+  function buildSubs() {
+    var list = subTracks(), cur = list.filter(function (t) { return t.mode === "hidden"; })[0];
+    $("ccWrap").hidden = !list.length;
+    if (!list.length) return;
+    if (!subsTouched && !cur) {                                 // повернути мову, яку глядач обрав минулого разу
+      var want = load("uvp-subs"), hit = list.filter(function (t) { return subKey(t) === want; })[0];
+      if (hit) { pickSub(hit); return; }
+    }
+    function item(text, t) {
+      return { label: text, checked: t === (cur || null), pick: function () { subsTouched = true; store("uvp-subs", t && subKey(t)); pickSub(t); } };
+    }
+    fillMenu($("ccMenu"), T.subs, [item(T.off, null)].concat(list.map(function (t) { return item(t.label || t.language || "CC", t); })));
+  }
+  video.textTracks.addEventListener("addtrack", function (e) {
+    if (e.track) e.track.addEventListener("cuechange", renderCues);
+    buildSubs();
+  });
+  bindMenu($("ccBtn"), $("ccMenu"));
+
+  (prop("subs") || "").split(",").forEach(function (part) {     // subs=uk:посилання,en:посилання або просто subs=посилання
+    part = part.trim();
+    var m = part.match(/^([a-z]{2,3}(?:-[a-z0-9]+)?):(?!\/\/)(.+)$/i), u = safeUrl(m ? m[2] : part, true);
+    if (!u) return;
+    var name = "CC";
+    if (m) { try { name = new Intl.DisplayNames([m[1]], { type: "language" }).of(m[1]); } catch (e) { name = m[1].toUpperCase(); } }
+    fetch(u.href).then(function (r) { if (!r.ok) throw new Error("subs " + r.status); return r.text(); }).then(function (text) {
+      var tr = document.createElement("track");                 // через blob: не потрібен crossorigin на самому відео, MP4 без CORS і далі грає
+      tr.kind = "subtitles"; tr.srclang = m ? m[1] : ""; tr.label = name;
+      tr.src = URL.createObjectURL(new Blob([text], { type: "text/vtt" }));
+      video.appendChild(tr);
+    }).catch(function () {});
+  });
 
   // ---------- Повний екран ----------
   function isFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
@@ -842,6 +988,7 @@
   // ---------- Клавіатура ----------
   document.addEventListener("keydown", function (e) {
     if (e.target.tagName === "INPUT" || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === " " && e.target.tagName === "BUTTON") return;   // пробіл на кнопці у фокусі натискає саме її
     switch (e.key) {
       case " ": case "k": togglePlay(); e.preventDefault(); break;
       case "ArrowLeft": case "j": skip(-10); e.preventDefault(); break;
@@ -850,17 +997,24 @@
       case "ArrowDown": video.volume = Math.max(0, video.volume - 0.1); e.preventDefault(); break;
       case "f": $("fsBtn").click(); break;
       case "m": video.muted = !video.muted; break;
-      case "Escape": if (scrubbing) endScrub(false); break;   // скасувати перетягування без переходу
+      case "Escape": closeMenus(); if (scrubbing) endScrub(false); break;   // скасувати перетягування без переходу
     }
   });
 
   // ---------- API для сторінки-господаря (postMessage) ----------
-  video.addEventListener("loadedmetadata", function () { emit("ready"); });
+  video.addEventListener("loadedmetadata", function () {
+    emit("ready", { videoWidth: video.videoWidth, videoHeight: video.videoHeight, type: props.type, engine: engine ? "hls.js" : "native" });
+  });
+  video.addEventListener("play", function () { if (!marks.start) { marks.start = 1; track("start"); } });
+  video.addEventListener("ended", function () { track("complete"); });
   ["play", "pause", "ended", "seeked"].forEach(function (e) { video.addEventListener(e, function () { emit(e); }); });
   var lastSec = -1;
   video.addEventListener("timeupdate", function () {            // не частіше ніж раз на секунду відео
     var s = Math.floor(video.currentTime);
     if (s !== lastSec) { lastSec = s; emit("timeupdate"); }
+    [25, 50, 75, 90].forEach(function (p) {                     // кожна позначка — один раз за перегляд
+      if (!marks[p] && video.duration && video.currentTime / video.duration * 100 >= p) { marks[p] = 1; track("progress", { percent: p }); }
+    });
   });
   window.addEventListener("message", function (e) {
     var d = e.data;

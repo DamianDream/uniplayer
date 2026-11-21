@@ -1,0 +1,15 @@
+{
+  "name": "uniplayer-demo",
+  "private": true,
+  "type": "module",
+  "description": "Демо и отладка Uniplayer: страница-хозяин, плеер в iframe с другого адреса, приём событий в SQLite",
+  "scripts": {
+    "dev": "vite"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "vite": "^8.3.8"
+  }
+}
