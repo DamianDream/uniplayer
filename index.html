@@ -1,26 +1,22 @@
 <!doctype html>
-<html lang="uk">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>Відеоплеєр</title>
-<link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2224%22%20r%3D%2224%22%20fill%3D%22%23d9d9d9%22%2F%3E%3Cpath%20fill%3D%22%23e3262f%22%20d%3D%22M18%2014.2v19.6c0%201.3%201.4%202.1%202.5%201.4l15.6-9.8c1-.6%201-2.2%200-2.8L20.5%2012.8c-1.1-.7-2.5.1-2.5%201.4z%22%2F%3E%3C%2Fsvg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Video player</title>
+<link id="favicon" rel="icon" type="image/svg+xml" href="data:,">
 <style>
   :root {
-    --accent: #e3262f;
+    --accent: #fff;
     --bg: #1b1a1f;
     --fg: #ececec;
     --muted: rgba(236,236,236,.62);
-    --ring: rgba(255,255,255,.82);
-    --hover-fill: #d9d9d9;
+    --hover-fill: rgba(255,255,255,.14);
     --track: rgba(255,255,255,.18);
     --buffer: rgba(255,255,255,.36);
     --panel: rgba(30,29,35,.97);
-    --font: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.3 var(--font); }
@@ -39,24 +35,15 @@
   .title { font-weight: 500; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%; }
   .top:empty, .top.no-title { display: none; }
 
-  /* ---------- Круглі кнопки: контур -> заливка при наведенні ---------- */
+  /* ---------- Кнопки-іконки без обводки: легке збільшення при наведенні ---------- */
   .rbtn { background: none; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center; border-radius: 50%; }
-  .rbtn svg { width: 100%; height: 100%; display: block; overflow: visible; }
-  .rbtn .ring { fill: none; stroke: var(--ring); stroke-width: 2; transition: opacity .15s ease; }
-  .rbtn .fill { fill: var(--hover-fill); opacity: 0; transition: opacity .15s ease; }
-  .rbtn .ico { fill: #fff; transition: fill .15s ease; }
-  .rbtn .line { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: opacity .15s ease; }
-  .rbtn .num { fill: #fff; font: 600 8.5px var(--font); transition: opacity .15s ease; }
-  @media (hover: hover) {
-    .rbtn:hover .fill { opacity: 1; }
-    .rbtn:hover .ring, .rbtn:hover .line, .rbtn:hover .num { opacity: 0; }
-    .rbtn:hover .ico { fill: var(--accent); }
-  }
-  .rbtn:active .fill, .rbtn:focus-visible .fill { opacity: 1; }
-  .rbtn:active .ring, .rbtn:active .line, .rbtn:active .num,
-  .rbtn:focus-visible .ring, .rbtn:focus-visible .line, .rbtn:focus-visible .num { opacity: 0; }
-  .rbtn:active .ico, .rbtn:focus-visible .ico { fill: var(--accent); }
-  .rbtn:focus-visible { outline: none; }
+  .rbtn svg { width: 100%; height: 100%; display: block; overflow: visible; transition: transform .15s ease; }
+  .rbtn .ico { fill: #fff; }
+  .rbtn .line { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .rbtn .num { fill: #fff; font: 600 8.5px var(--font); }
+  @media (hover: hover) { .rbtn:hover svg { transform: scale(1.1); } }
+  .rbtn:active svg { transform: scale(.94); }
+  .rbtn:focus-visible, .ibtn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
   .i-pause { display: none; }
   .playing .i-play { display: none; }
@@ -120,8 +107,8 @@
     transition: background .15s ease, color .15s ease; }
   .ibtn svg { width: 100%; height: 100%; display: block; }
   .ibtn.txt { width: auto; min-width: 38px; padding: 0 10px; border-radius: 19px; font-weight: 500; font-size: 13px; }
-  @media (hover: hover) { .ibtn:hover { background: var(--hover-fill); color: var(--accent); } }
-  .ibtn:active, .ibtn:focus-visible, .ibtn[aria-expanded="true"] { background: var(--hover-fill); color: var(--accent); outline: none; }
+  @media (hover: hover) { .ibtn:hover { background: var(--hover-fill); } }
+  .ibtn:active, .ibtn[aria-expanded="true"] { background: var(--hover-fill); }
   .i-muted { display: none; }
   .is-muted .i-muted { display: inline; }
   .is-muted .i-vol { display: none; }
@@ -150,11 +137,11 @@
   .toast { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); padding: 8px 14px; border-radius: 10px;
     font-size: 13px; opacity: 0; transition: opacity .2s ease; pointer-events: none; white-space: nowrap; }
   .toast.show { opacity: 1; }
-  .hint { position: absolute; top: 50%; width: 64px; height: 64px; margin-top: -32px; border-radius: 50%; background: rgba(217,217,217,.92);
+  .hint { position: absolute; top: 50%; width: 64px; height: 64px; margin-top: -32px; border-radius: 50%; background: rgba(0,0,0,.55);
     display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
   .hint.l { left: 14%; } .hint.r { right: 14%; }
   .hint.show { opacity: 1; }
-  .hint svg { width: 30px; height: 30px; fill: var(--accent); }
+  .hint svg { width: 30px; height: 30px; fill: #fff; }
 
   .error { position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; background: var(--bg); }
   .vp.failed .error { display: grid; }
@@ -194,8 +181,7 @@
   <div class="top no-title" id="top"><div class="title" id="title"></div></div>
 
   <button class="rbtn center" id="centerBtn" aria-label="">
-    <svg viewBox="0 0 48 48" aria-hidden="true">
-      <circle class="ring" cx="24" cy="24" r="23"/><circle class="fill" cx="24" cy="24" r="24"/>
+    <svg viewBox="14 12 24 24" aria-hidden="true">
       <path class="ico i-play" d="M19 15.6v16.8c0 .8.9 1.3 1.6.9l13.3-8.4c.6-.4.6-1.4 0-1.8L20.6 14.7c-.7-.4-1.6.1-1.6.9z"/>
       <g class="ico i-pause"><rect x="17" y="15" width="4.6" height="18" rx="1.4"/><rect x="26.4" y="15" width="4.6" height="18" rx="1.4"/></g>
     </svg>
@@ -235,22 +221,19 @@
       <div class="mid">
         <button class="rbtn skip" id="backBtn">
           <svg viewBox="0 0 40 40" aria-hidden="true">
-            <circle class="fill" cx="20" cy="21" r="15"/>
             <path class="line" d="M20 9 A12 12 0 1 1 8.6 17.3"/><path class="line" d="M23 6 L20 9 L23 12"/>
             <text class="num" x="7.5" y="10" text-anchor="middle">10</text>
             <path class="ico" d="M19.6 16.8v8.4L13.4 21zM26.4 16.8v8.4L20.2 21z"/>
           </svg>
         </button>
         <button class="rbtn play" id="playBtn">
-          <svg viewBox="0 0 48 48" aria-hidden="true">
-            <circle class="ring" cx="24" cy="24" r="23"/><circle class="fill" cx="24" cy="24" r="24"/>
+          <svg viewBox="10 10 28 28" aria-hidden="true">
             <path class="ico i-play" d="M19 15.6v16.8c0 .8.9 1.3 1.6.9l13.3-8.4c.6-.4.6-1.4 0-1.8L20.6 14.7c-.7-.4-1.6.1-1.6.9z"/>
             <g class="ico i-pause"><rect x="17" y="15" width="4.6" height="18" rx="1.4"/><rect x="26.4" y="15" width="4.6" height="18" rx="1.4"/></g>
           </svg>
         </button>
         <button class="rbtn skip" id="fwdBtn">
           <svg viewBox="0 0 40 40" aria-hidden="true">
-            <circle class="fill" cx="20" cy="21" r="15"/>
             <g transform="translate(40 0) scale(-1 1)"><path class="line" d="M20 9 A12 12 0 1 1 8.6 17.3"/><path class="line" d="M23 6 L20 9 L23 12"/></g>
             <text class="num" x="32.5" y="10" text-anchor="middle">10</text>
             <path class="ico" d="M20.4 16.8v8.4l6.2-4.2zM13.6 16.8v8.4l6.2-4.2z"/>
@@ -281,21 +264,25 @@
   </div>
 </div>
 
+<!-- Необовʼязковий файл налаштувань поруч із плеєром; без нього працюють універсальні значення нижче -->
+<script src="player.config.js"></script>
 <script>
 (function () {
   "use strict";
 
   // =====================================================================
-  //  НАЛАШТУВАННЯ ВЛАСНИКА (змінюються тут, а не в посиланні)
+  //  НАЛАШТУВАННЯ ВЛАСНИКА: універсальні значення за замовчуванням.
+  //  Змінюються у player.config.js (window.UNIPLAYER_CONFIG), а не в посиланні.
   // =====================================================================
-  var CONFIG = {
-    defaultBase: "https://cdn.astakhova.com.ua",   // для короткого ?v=папка/відео
-    allowedHosts: [],                               // [] — будь-які сайти; або ["cdn.astakhova.com.ua", "*.b-cdn.net"]
+  var CONFIG = Object.assign({
+    defaultBase: "",                                // адреса CDN для короткого ?v=папка/відео; "" — короткий запис вимкнено
+    allowedHosts: [],                               // [] — будь-які сайти; або ["cdn.example.com", "*.b-cdn.net"]
+    autoPoster: false,                              // true — шукати poster.jpg поруч із master.m3u8
     seek: true,                                     // false — заборонити перемотування для ВСІХ відео цього файлу (посилання не зможе ввімкнути)
     hlsLib:  "https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js",
-    dashLib: "https://cdn.jsdelivr.net/npm/dashjs@4.7.4/dist/dash.all.min.js",
-    lang: "uk"
-  };
+    accent: "",                                     // колір за замовчуванням, HEX; "" — нейтральний білий
+    lang: ""                                        // "" — мова браузера глядача (uk / ru / en), запасна en
+  }, window.UNIPLAYER_CONFIG);
 
   var I18N = {
     uk: { play: "Відтворити", pause: "Пауза", back: "Назад на 10 секунд", fwd: "Вперед на 10 секунд", mute: "Вимкнути звук",
@@ -328,12 +315,22 @@
   function prop(n) { var v = Q.get(n); return v === null ? null : v.trim(); }
   function flag(n, def) { var v = prop(n); return v === null ? def : !/^(0|false|no|off)$/i.test(v); }
 
-  var langKey = (prop("lang") || CONFIG.lang).toLowerCase();
-  var T = I18N[langKey] || I18N[CONFIG.lang];
-  document.documentElement.lang = I18N[langKey] ? langKey : CONFIG.lang;
+  var langKey = (prop("lang") || CONFIG.lang || navigator.language || "en").slice(0, 2).toLowerCase();
+  if (!I18N[langKey]) langKey = "en";
+  var T = I18N[langKey];
+  document.documentElement.lang = langKey;
 
   var $ = function (id) { return document.getElementById(id); };
   var vp = $("vp"), video = $("video");
+
+  // ---------- Події для сторінки-господаря (плеєр в iframe) ----------
+  var framed = window.parent !== window;
+  function emit(event, extra) {
+    if (!framed) return;
+    // "*" — сторінка-господар невідома заздалегідь; у повідомленні лише стан відтворення, без посилання на відео
+    window.parent.postMessage(Object.assign({ source: "uniplayer", event: event,
+      currentTime: video.currentTime || 0, duration: video.duration || 0 }, extra), "*");
+  }
 
   function hostAllowed(h) {
     if (!CONFIG.allowedHosts.length) return true;
@@ -352,6 +349,7 @@
     return u;
   }
   function fromShortPath(p) {                                   // ?v=amm/urok -> CDN/amm/urok/master.m3u8
+    if (!CONFIG.defaultBase) return null;
     p = p.replace(/^\/+|\/+$/g, "");
     if (!/^[\w.\-\/]+$/.test(p) || p.indexOf("..") !== -1) return null;
     if (!/\.[a-z0-9]{2,5}$/i.test(p)) p += "/master.m3u8";
@@ -390,8 +388,8 @@
     loop: flag("loop", false),
     resume: flag("resume", true),
     speed: parseFloat(prop("speed")),
-    accent: prop("accent") || prop("color"),
-    embed: flag("embed", false),
+    accent: prop("accent") || prop("color") || CONFIG.accent,
+    embed: flag("embed", framed),                                // в iframe вмикається сам
     seek: CONFIG.seek !== false && flag("seek", true) && !flag("noseek", false),   // посилання може лише заборонити, не дозволити
     fit: prop("fit")
   };
@@ -411,15 +409,16 @@
   }
   function setFavicon(color) {                                  // фавікон у стилі кнопки запуску, без окремого файлу
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">' +
-      '<circle cx="24" cy="24" r="24" fill="#d9d9d9"/>' +
+      '<circle cx="24" cy="24" r="24" fill="#1b1a1f"/>' +
       '<path fill="' + color + '" d="M18 14.2v19.6c0 1.3 1.4 2.1 2.5 1.4l15.6-9.8c1-.6 1-2.2 0-2.8L20.5 12.8c-1.1-.7-2.5.1-2.5 1.4z"/></svg>';
     $("favicon").href = "data:image/svg+xml," + encodeURIComponent(svg);
   }
+  var accentHex = "#fff";
   if (props.accent && /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(props.accent)) {
-    var accentHex = props.accent.charAt(0) === "#" ? props.accent : "#" + props.accent;
+    accentHex = props.accent.charAt(0) === "#" ? props.accent : "#" + props.accent;
     document.documentElement.style.setProperty("--accent", accentHex);
-    setFavicon(accentHex);                                      // фавікон бере той самий колір, що й плеєр
   }
+  setFavicon(accentHex);                                        // фавікон бере той самий колір, що й плеєр
   if (props.title) {
     $("title").textContent = props.title;                     // лише текст — жодного HTML із посилання
     $("top").classList.remove("no-title");
@@ -437,9 +436,10 @@
     $("errorText").querySelector("span").innerHTML = hint;      // hint — лише з I18N, не з адреси
     vp.classList.add("failed", "started");
     vp.classList.remove("waiting");
+    emit("error", { message: title });
   }
 
-  if (!props.src) {
+  if (!props.src || props.type === "dash") {                    // DASH прибрано: HLS працює в тих самих браузерах
     if (rawSrc || rawV) showError(T.badSrc, T.badSrcHint); else showError(T.noSrc, T.noSrcHint);
     return;
   }
@@ -475,7 +475,7 @@
   // ---------- Постер ----------
   var posterUrl = safeUrl(props.poster, false);
   if (posterUrl) video.poster = posterUrl.href;
-  else if (!props.poster && props.type === "hls" && /\/master\.m3u8$/i.test(srcUrl.pathname)) {
+  else if (CONFIG.autoPoster && !props.poster && props.type === "hls" && /\/master\.m3u8$/i.test(srcUrl.pathname)) {
     var guess = new URL("poster.jpg", srcUrl.href).href, img = new Image();
     img.onload = function () { if (!video.poster) video.poster = guess; };
     img.src = guess;                                          // підставляємо, лише якщо такий файл є
@@ -497,6 +497,7 @@
       if (!window.Hls || !Hls.isSupported()) { if (nativeHls) { video.src = props.src; return; } throw new Error("hls unsupported"); }
       var hls = new Hls({ capLevelToPlayerSize: true, maxBufferLength: 30 });
       var fatal = 0;
+      hls.on(Hls.Events.FRAG_BUFFERED, function () { fatal = 0; });   // рахуємо лише збої поспіль, а не за весь перегляд
       hls.on(Hls.Events.ERROR, function (_, d) {
         if (!d.fatal) return;
         if (++fatal > 3) { hls.destroy(); showError(T.loadErr, T.loadErrHint); return; }
@@ -515,30 +516,7 @@
     }, function () { if (nativeHls) { video.src = props.src; } else throw new Error("hls lib"); });
   }
 
-  function startDash() {
-    return loadScript(CONFIG.dashLib).then(function () {
-      if (!window.dashjs || !dashjs.supportsMediaSource()) throw new Error("dash unsupported");
-      var p = dashjs.MediaPlayer().create();
-      p.updateSettings({ debug: { logLevel: dashjs.Debug.LOG_LEVEL_NONE }, streaming: { abr: { limitBitrateByPortal: true } } });
-      p.initialize(video, props.src, false);
-      p.on(dashjs.MediaPlayer.events.ERROR, function () { showError(T.loadErr, T.loadErrHint); });
-      engine = {
-        levels: function () { return (p.getBitrateInfoListFor("video") || []).map(function (l) { return { i: l.qualityIndex, h: l.height, b: l.bitrate }; }); },
-        set: function (i) {
-          p.updateSettings({ streaming: { abr: { autoSwitchBitrate: { video: i < 0 } } } });
-          if (i >= 0) p.setQualityFor("video", i, true);
-        },
-        current: -1
-      };
-      p.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, buildQuality);
-      p.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, function (e) {
-        if (e.mediaType === "video") { engine.current = e.newQuality; updateNow(); }
-      });
-    });
-  }
-
-  var ready = props.type === "hls" ? startHls() : props.type === "dash" ? startDash()
-            : (video.src = props.src, Promise.resolve());
+  var ready = props.type === "hls" ? startHls() : (video.src = props.src, Promise.resolve());
   ready.then(function () {
     if (props.autoplay) {
       var pr = video.play();
@@ -547,7 +525,7 @@
   }, function () { showError(T.loadErr, T.loadErrHint); });
 
   video.addEventListener("error", function () {
-    if (!engine) showError(T.loadErr, T.loadErrHint);         // для hls/dash помилки обробляє бібліотека
+    if (!engine) showError(T.loadErr, T.loadErrHint);         // для hls.js помилки обробляє бібліотека
   });
 
   // ---------- Відновлення позиції ----------
@@ -679,7 +657,7 @@
   progress.addEventListener("pointercancel", function () { endScrub(false); });
   progress.addEventListener("lostpointercapture", function () { endScrub(false); });
 
-  // ---------- Превʼю кадру: другий прихований плеєр у найнижчій якості ----------
+  // ---------- Превʼю кадру (лише HLS): другий прихований плеєр у найнижчій якості ----------
   var pv = $("pvideo"), pEngine = null, pReady = false, pBusy = false, pWant = -1, pLast = -1, pTimer = null;
   var P_STEP = 1;                                               // точність превʼю, секунд
   pv.muted = true;
@@ -692,38 +670,20 @@
   }
   function ensurePreview() {
     if (pEngine !== null) return;
-    if (props.type === "hls" && mseOk && !window.Hls) return;   // бібліотека ще вантажиться — спробуємо при наступному наведенні
-    if (props.type === "dash" && !window.dashjs) return;
-    pv.addEventListener("error", previewOff);
+    if (props.type !== "hls" || !mseOk) { previewOff(); return; }   // лише HLS: для файлу превʼю означало б друге завантаження всього відео
+    if (!window.Hls) return;                                    // бібліотека ще вантажиться — спробуємо при наступному наведенні
+    if (!Hls.isSupported()) { previewOff(); return; }
     pv.addEventListener("loadedmetadata", sizePreview);
-    try {
-      if (props.type === "hls" && window.Hls && Hls.isSupported()) {
-        var h = new Hls({ autoStartLoad: false, capLevelToPlayerSize: false, maxBufferLength: 2, maxMaxBufferLength: 4, backBufferLength: 0 });
-        h.on(Hls.Events.MANIFEST_PARSED, function () {
-          var low = 0;
-          h.levels.forEach(function (l, i) { if ((l.height || 1e9) < (h.levels[low].height || 1e9)) low = i; });
-          h.startLevel = low; h.currentLevel = low;             // лише найменша якість — економимо трафік
-          h.startLoad(pWant > 0 ? pWant : 0);
-          pReady = true; flushPreview();
-        });
-        h.on(Hls.Events.ERROR, function (_, d) { if (d.fatal) { try { h.destroy(); } catch (_) {} previewOff(); } });
-        h.loadSource(props.src); h.attachMedia(pv); pEngine = h;
-      } else if (props.type === "dash" && window.dashjs) {
-        var d = dashjs.MediaPlayer().create();
-        d.updateSettings({ debug: { logLevel: dashjs.Debug.LOG_LEVEL_NONE }, streaming: { abr: { autoSwitchBitrate: { video: false } },
-          buffer: { stableBufferTime: 2, bufferTimeAtTopQuality: 2, bufferTimeAtTopQualityLongForm: 2 } } });
-        d.initialize(pv, props.src, false);
-        d.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function () {
-          try { d.setQualityFor("video", 0, true); } catch (_) {}
-          pReady = true; flushPreview();
-        });
-        d.on(dashjs.MediaPlayer.events.ERROR, previewOff);
-        pEngine = d;
-      } else {                                                  // MP4 / WebM / вбудований HLS
-        pv.preload = "auto"; pv.src = props.src; pEngine = "native";
-        pv.addEventListener("loadedmetadata", function () { pReady = true; flushPreview(); }, { once: true });
-      }
-    } catch (e) { previewOff(); }
+    var h = new Hls({ autoStartLoad: false, capLevelToPlayerSize: false, maxBufferLength: 2, maxMaxBufferLength: 4, backBufferLength: 0 });
+    h.on(Hls.Events.MANIFEST_PARSED, function () {
+      var low = 0;
+      h.levels.forEach(function (l, i) { if ((l.height || 1e9) < (h.levels[low].height || 1e9)) low = i; });
+      h.startLevel = low; h.currentLevel = low;                 // лише найменша якість — економимо трафік
+      h.startLoad(pWant > 0 ? pWant : 0);
+      pReady = true; flushPreview();
+    });
+    h.on(Hls.Events.ERROR, function (_, d) { if (d.fatal) { try { h.destroy(); } catch (_) {} previewOff(); } });
+    h.loadSource(props.src); h.attachMedia(pv); pEngine = h;
   }
   function previewAt(t) {
     if (!pEngine || pEngine === "off") return;
@@ -891,6 +851,27 @@
       case "f": $("fsBtn").click(); break;
       case "m": video.muted = !video.muted; break;
       case "Escape": if (scrubbing) endScrub(false); break;   // скасувати перетягування без переходу
+    }
+  });
+
+  // ---------- API для сторінки-господаря (postMessage) ----------
+  video.addEventListener("loadedmetadata", function () { emit("ready"); });
+  ["play", "pause", "ended", "seeked"].forEach(function (e) { video.addEventListener(e, function () { emit(e); }); });
+  var lastSec = -1;
+  video.addEventListener("timeupdate", function () {            // не частіше ніж раз на секунду відео
+    var s = Math.floor(video.currentTime);
+    if (s !== lastSec) { lastSec = s; emit("timeupdate"); }
+  });
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (!framed || e.source !== window.parent || !d || d.target !== "uniplayer") return;   // команди — лише від сторінки-господаря
+    var n = typeof d.value === "number" && isFinite(d.value);
+    switch (d.command) {
+      case "play": if (video.paused) togglePlay(); break;
+      case "pause": video.pause(); break;
+      case "seek": if (props.seek && n && isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration, d.value)); break;
+      case "mute": video.muted = d.value !== false; break;
+      case "volume": if (n && d.value >= 0 && d.value <= 1) { video.volume = d.value; video.muted = d.value === 0; } break;
     }
   });
 })();
