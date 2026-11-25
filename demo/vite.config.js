@@ -74,9 +74,16 @@ function uniplayerDemo() {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const path = req.url.split("?")[0];
-        if (path === "/api/events") return api(req, res);
         const file = PLAYER_FILES[path];
-        if (!file) return next();
+        if (path !== "/api/events" && !file) return next();
+        // Этот обработчик стоит раньше проверок самого Vite, поэтому имя хоста проверяем сами:
+        // чужой сайт, чей домен указывает на 127.0.0.1, не должен читать или стирать базу.
+        const host = (req.headers.host || "").replace(/:\d+$/, "");
+        if (host !== "127.0.0.1" && host !== "localhost") {
+          res.writeHead(403);
+          return res.end();
+        }
+        if (!file) return api(req, res);
         res.writeHead(200, { "Content-Type": file[1], "Cache-Control": "no-store" }); // правки в плеере видны сразу
         createReadStream(file[0]).pipe(res);
       });
